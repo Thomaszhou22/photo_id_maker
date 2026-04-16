@@ -261,7 +261,7 @@ function StepBadge({ step, currentStep, label, num }: { step: Step; currentStep:
 // ==================== APP ====================
 export default function App() {
   const [step, setStep] = useState<Step>('upload')
-  const [lang, setLang] = useState<Lang>('zh')
+  const [lang, setLang] = useState<Lang>('en')
   const [, setOriginalFile] = useState<File | null>(null)
   const [originalUrl, setOriginalUrl] = useState<string>('')
   const [removing, setRemoving] = useState(false)
@@ -487,16 +487,16 @@ export default function App() {
         {/* Language toggle pill */}
         <div className="rounded-lg border border-slate-200/90 bg-slate-50/90 p-0.5 shadow-sm flex items-center">
           <button
-            onClick={() => setLang('zh')}
-            className={`px-3 py-1.5 text-sm font-semibold rounded-md transition-all ${lang === 'zh' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            中文
-          </button>
-          <button
             onClick={() => setLang('en')}
             className={`px-3 py-1.5 text-sm font-semibold rounded-md transition-all ${lang === 'en' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
             EN
+          </button>
+          <button
+            onClick={() => setLang('zh')}
+            className={`px-3 py-1.5 text-sm font-semibold rounded-md transition-all ${lang === 'zh' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            中文
           </button>
         </div>
       </div>
