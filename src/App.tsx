@@ -258,6 +258,7 @@ export default function App() {
   const [editHistory, setEditHistory] = useState<ImageData[]>([])
   const [brushRadius, setBrushRadius] = useState(15)
   const [isEraser, setIsEraser] = useState(false)
+  const originalCutoutRef = useRef<HTMLCanvasElement | null>(null)
   const editCanvasRef = useRef<HTMLCanvasElement>(null)
   const isDrawingRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -304,6 +305,12 @@ export default function App() {
       const ctx = canvas.getContext('2d')!
       ctx.drawImage(img, 0, 0)
       setCutoutCanvas(canvas)
+      // Save original for eraser restore
+      const orig = document.createElement('canvas')
+      orig.width = canvas.width
+      orig.height = canvas.height
+      orig.getContext('2d')!.drawImage(canvas, 0, 0)
+      originalCutoutRef.current = orig
       URL.revokeObjectURL(url)
     } catch (err) {
       console.error('Background removal failed:', err)
@@ -412,14 +419,16 @@ export default function App() {
     const r = brushRadius * scaleX
     const ctx = cutout.getContext('2d')!
     if (isEraser) {
-      // Restore: not easy without original, so just draw original pixels back
-      // We'll just leave eraser for clearing the mask (making opaque)
-      ctx.save()
-      ctx.globalCompositeOperation = 'destination-out'
-      ctx.beginPath()
-      ctx.arc(x, y, r, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.restore()
+      // Restore original pixels from the saved cutout
+      const orig = originalCutoutRef.current
+      if (orig) {
+        ctx.save()
+        ctx.beginPath()
+        ctx.arc(x - r, y - r, r * 2, 0, Math.PI * 2)
+        ctx.clip()
+        ctx.drawImage(orig, 0, 0)
+        ctx.restore()
+      }
     } else {
       // Erase (make transparent)
       ctx.save()
