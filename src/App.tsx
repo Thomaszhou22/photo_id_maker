@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { Camera } from 'lucide-react'
 import { removeBackground, preload } from '@imgly/background-removal'
 import { jsPDF } from 'jspdf'
 
@@ -478,8 +479,8 @@ export default function App() {
     <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/80 backdrop-blur-md shadow-sm">
       <div className="max-w-2xl mx-auto flex items-center justify-between px-6 py-3">
         <div className="flex items-center gap-3">
-          <div className="rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/20 w-9 h-9 flex items-center justify-center text-lg">
-            📷
+          <div className="rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/20 w-9 h-9 flex items-center justify-center">
+            <Camera className="h-5 w-5" strokeWidth={2} />
           </div>
           <h1 className="text-lg font-bold tracking-tight text-slate-900">{strings.title}</h1>
         </div>
@@ -538,7 +539,7 @@ export default function App() {
               className="border-2 border-dashed border-slate-300 rounded-2xl bg-slate-50/50 p-16 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-all duration-300 group"
             >
               <div className="rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/20 w-16 h-16 mx-auto mb-5 flex items-center justify-center text-3xl group-hover:scale-105 transition-transform duration-300">
-                🖼️
+                
               </div>
               <p className="text-lg font-semibold text-slate-700 mb-1">{strings.uploadHint}</p>
               <p className="text-sm text-slate-400">{strings.uploadFormats}</p>
@@ -675,7 +676,7 @@ export default function App() {
                         onClick={startEditing}
                         className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-all"
                       >
-                        ✏️ {strings.manualEdit}
+                        {strings.manualEdit}
                       </button>
                     ) : (
                       <div className="flex gap-2">
@@ -684,13 +685,13 @@ export default function App() {
                           disabled={editHistory.length === 0}
                           className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition-all"
                         >
-                          ↩️ {strings.undoEdit}
+                          {strings.undoEdit}
                         </button>
                         <button
                           onClick={applyEditing}
                           className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-blue-700 hover:shadow-lift"
                         >
-                          ✓ {strings.applyEdit}
+                          {strings.applyEdit}
                         </button>
                       </div>
                     )}
@@ -705,7 +706,7 @@ export default function App() {
                             isEraser ? 'bg-slate-900 text-white shadow-md' : 'bg-red-500 text-white shadow-md shadow-red-500/25'
                           }`}
                         >
-                          {isEraser ? '🧹 ' + strings.eraserMode : '🖌️ ' + strings.paintMode}
+                          {isEraser ? '' + strings.eraserMode : '' + strings.paintMode}
                         </button>
                         <div className="flex items-center gap-2">
                           <span className="text-sm text-slate-500">{strings.brushSize}</span>
@@ -802,13 +803,13 @@ export default function App() {
               onClick={handleDownloadPNG}
               className="w-full rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-semibold text-white shadow-soft transition hover:bg-blue-700 hover:shadow-lift flex items-center justify-center gap-2.5"
             >
-              <span className="text-lg">📥</span> {strings.downloadPhoto}
+              {strings.downloadPhoto}
             </button>
             <button
               onClick={handleDownloadPDF}
               className="w-full rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-3.5 text-sm font-semibold text-white shadow-soft transition hover:from-emerald-700 hover:to-teal-700 hover:shadow-lift flex items-center justify-center gap-2.5"
             >
-              <span className="text-lg">🖨️</span> {strings.downloadPrint}
+              {strings.downloadPrint}
             </button>
           </div>
 
