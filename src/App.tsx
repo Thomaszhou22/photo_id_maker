@@ -51,6 +51,13 @@ const t = (lang: Lang) => ({
   blue: lang === 'zh' ? '蓝色' : 'Blue',
   red: lang === 'zh' ? '红色' : 'Red',
   transparent: lang === 'zh' ? '透明' : 'Transparent',
+  manualEdit: lang === 'zh' ? '手动修图' : 'Manual Edit',
+  manualEditHint: lang === 'zh' ? '用画笔擦除不需要的部分（红色蒙版）' : 'Paint over unwanted areas (red mask)',
+  brushSize: lang === 'zh' ? '画笔大小' : 'Brush Size',
+  eraserMode: lang === 'zh' ? '橡皮擦（恢复）' : 'Eraser (Restore)',
+  paintMode: lang === 'zh' ? '画笔（擦除）' : 'Brush (Erase)',
+  undoEdit: lang === 'zh' ? '撤销' : 'Undo',
+  applyEdit: lang === 'zh' ? '应用修改' : 'Apply Changes',
 })
 
 // --- Helper: load image from File or URL ---
@@ -247,6 +254,12 @@ export default function App() {
   const [bgColor, setBgColor] = useState<BgColor>('white')
   const [sizeIndex, setSizeIndex] = useState(0)
   const [finalCanvas, setFinalCanvas] = useState<HTMLCanvasElement | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [editHistory, setEditHistory] = useState<ImageData[]>([])
+  const [brushRadius, setBrushRadius] = useState(15)
+  const [isEraser, setIsEraser] = useState(false)
+  const editCanvasRef = useRef<HTMLCanvasElement>(null)
+  const isDrawingRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const strings = t(lang)
@@ -335,6 +348,102 @@ export default function App() {
     if (!finalCanvas) return
     generatePrintPDF(finalCanvas, size, lang)
   }
+
+  // --- Manual editing on cutout canvas ---
+  const startEditing = useCallback(() => {
+    if (!cutoutCanvas) return
+    // Save current state for undo
+    const ctx = cutoutCanvas.getContext('2d')!
+    setEditHistory([ctx.getImageData(0, 0, cutoutCanvas.width, cutoutCanvas.height)])
+    setEditing(true)
+    // Initialize edit canvas after render
+    requestAnimationFrame(() => {
+      const ec = editCanvasRef.current
+      if (ec && cutoutCanvas) {
+        // Scale to fit max 400px width
+        const maxW = 400
+        const scale = Math.min(maxW / cutoutCanvas.width, maxW / cutoutCanvas.height, 1)
+        ec.width = Math.round(cutoutCanvas.width * scale)
+        ec.height = Math.round(cutoutCanvas.height * scale)
+        ec.getContext('2d')!.drawImage(cutoutCanvas, 0, 0, ec.width, ec.height)
+      }
+    })
+  }, [cutoutCanvas])
+
+  const applyEditing = useCallback(() => {
+    if (!cutoutCanvas) return
+    setEditing(false)
+    setEditHistory([])
+    // Force re-render of final canvas
+    setCutoutCanvas((prev) => {
+      if (!prev) return prev
+      const copy = document.createElement('canvas')
+      copy.width = prev.width
+      copy.height = prev.height
+      copy.getContext('2d')!.drawImage(prev, 0, 0)
+      return copy
+    })
+  }, [cutoutCanvas])
+
+  const undoEdit = useCallback(() => {
+    if (!cutoutCanvas || editHistory.length === 0) return
+    const prev = editHistory[editHistory.length - 1]
+    const ctx = cutoutCanvas.getContext('2d')!
+    ctx.putImageData(prev, 0, 0)
+    setEditHistory((h) => h.slice(0, -1))
+    // Update display
+    const ec = editCanvasRef.current
+    if (ec) {
+      const ectx = ec.getContext('2d')!
+      ectx.clearRect(0, 0, ec.width, ec.height)
+      ectx.drawImage(cutoutCanvas, 0, 0, ec.width, ec.height)
+    }
+  }, [cutoutCanvas, editHistory])
+
+  const editCanvasDraw = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const ec = editCanvasRef.current
+    const cutout = cutoutCanvas
+    if (!ec || !cutout || !isDrawingRef.current) return
+    const rect = ec.getBoundingClientRect()
+    const scaleX = cutout.width / rect.width
+    const scaleY = cutout.height / rect.height
+    const x = (e.clientX - rect.left) * scaleX
+    const y = (e.clientY - rect.top) * scaleY
+    const r = brushRadius * scaleX
+    const ctx = cutout.getContext('2d')!
+    if (isEraser) {
+      // Restore: not easy without original, so just draw original pixels back
+      // We'll just leave eraser for clearing the mask (making opaque)
+      ctx.save()
+      ctx.globalCompositeOperation = 'destination-out'
+      ctx.beginPath()
+      ctx.arc(x, y, r, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.restore()
+    } else {
+      // Erase (make transparent)
+      ctx.save()
+      ctx.globalCompositeOperation = 'destination-out'
+      ctx.beginPath()
+      ctx.arc(x, y, r, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.restore()
+    }
+    // Mirror to edit display canvas
+    const ectx = ec.getContext('2d')!
+    ectx.clearRect(0, 0, ec.width, ec.height)
+    ectx.drawImage(cutout, 0, 0, ec.width, ec.height)
+  }, [cutoutCanvas, brushRadius, isEraser])
+
+  const editCanvasMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    isDrawingRef.current = true
+    // Save state before drawing for undo
+    if (cutoutCanvas) {
+      const ctx = cutoutCanvas.getContext('2d')!
+      setEditHistory((prev) => [...prev, ctx.getImageData(0, 0, cutoutCanvas.width, cutoutCanvas.height)])
+    }
+    editCanvasDraw(e)
+  }, [cutoutCanvas, editCanvasDraw])
 
   const goToUpload = () => {
     setStep('upload')
@@ -486,6 +595,73 @@ export default function App() {
                   </div>
                 </div>
               )}
+
+              {/* Manual Edit */}
+              <div className="bg-white/80 backdrop-blur rounded-2xl shadow-lg p-6 mb-4">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-semibold text-slate-700">{strings.manualEdit}</p>
+                  {!editing ? (
+                    <button
+                      onClick={startEditing}
+                      className="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition-all"
+                    >
+                      ✏️ {strings.manualEdit}
+                    </button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={undoEdit}
+                        disabled={editHistory.length === 0}
+                        className="px-3 py-1.5 rounded-lg bg-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-300 disabled:opacity-50 transition-all"
+                      >
+                        ↩️ {strings.undoEdit}
+                      </button>
+                      <button
+                        onClick={applyEditing}
+                        className="px-3 py-1.5 rounded-lg bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 transition-all"
+                      >
+                        ✓ {strings.applyEdit}
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {editing && (
+                  <>
+                    <p className="text-xs text-slate-400 mb-3">{strings.manualEditHint}</p>
+                    <div className="flex items-center gap-3 mb-3 flex-wrap">
+                      <button
+                        onClick={() => setIsEraser(!isEraser)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${isEraser ? 'bg-slate-700 text-white' : 'bg-red-500 text-white'}`}
+                      >
+                        {isEraser ? '🧹 ' + strings.eraserMode : '🖌️ ' + strings.paintMode}
+                      </button>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500">{strings.brushSize}</span>
+                        <input
+                          type="range"
+                          min={3}
+                          max={50}
+                          value={brushRadius}
+                          onChange={(e) => setBrushRadius(Number(e.target.value))}
+                          className="w-24"
+                        />
+                        <span className="text-xs text-slate-400 w-6">{brushRadius}</span>
+                      </div>
+                    </div>
+                    <div className="flex justify-center">
+                      <canvas
+                        ref={editCanvasRef}
+                        onMouseDown={editCanvasMouseDown}
+                        onMouseMove={editCanvasDraw}
+                        onMouseUp={() => { isDrawingRef.current = false }}
+                        onMouseLeave={() => { isDrawingRef.current = false }}
+                        className="rounded-lg border-2 border-dashed border-slate-300 cursor-crosshair max-w-full"
+                        style={{ maxHeight: 400 }}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
 
               {/* Nav */}
               <div className="flex justify-between mt-6">
