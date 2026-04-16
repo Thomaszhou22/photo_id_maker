@@ -1,11 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { removeBackground } from '@imgly/background-removal'
+import { removeBackground, preload } from '@imgly/background-removal'
 import { jsPDF } from 'jspdf'
 
 // --- Types & Constants ---
 type Step = 'upload' | 'edit' | 'download'
 type Lang = 'zh' | 'en'
 type BgColor = 'white' | 'blue' | 'red' | 'transparent'
+type ProgressState = { stage: string; progress: number } | null
 
 interface SizePreset {
   labelZh: string
@@ -239,6 +240,9 @@ export default function App() {
   const [, setOriginalFile] = useState<File | null>(null)
   const [originalUrl, setOriginalUrl] = useState<string>('')
   const [removing, setRemoving] = useState(false)
+  const [removingProgress, setRemovingProgress] = useState<ProgressState>(null)
+  const [preloading, setPreloading] = useState(true)
+  const [preloadProgress, setPreloadProgress] = useState(0)
   const [cutoutCanvas, setCutoutCanvas] = useState<HTMLCanvasElement | null>(null)
   const [bgColor, setBgColor] = useState<BgColor>('white')
   const [sizeIndex, setSizeIndex] = useState(0)
@@ -248,14 +252,37 @@ export default function App() {
   const strings = t(lang)
   const size = SIZE_PRESETS[sizeIndex]
 
+  // Preload AI model on page load
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        setPreloadProgress(10)
+        await preload()
+        if (!cancelled) setPreloadProgress(100)
+      } catch (e) {
+        // Model preload failed silently, will retry on actual use
+      } finally {
+        if (!cancelled) setPreloading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
   // Process uploaded file
   const processFile = useCallback(async (file: File) => {
     setOriginalFile(file)
     setOriginalUrl(URL.createObjectURL(file))
     setStep('edit')
     setRemoving(true)
+    setRemovingProgress(null)
     try {
-      const blob = await removeBackground(file)
+      const blob = await removeBackground(file, {
+        progress: (key: string, current: number, total: number) => {
+          const pct = total > 0 ? Math.round((current / total) * 100) : 0
+          setRemovingProgress({ stage: key, progress: pct })
+        },
+      })
       const url = URL.createObjectURL(blob)
       const img = await loadImage(url)
       const canvas = document.createElement('canvas')
@@ -348,6 +375,14 @@ export default function App() {
             <p className="text-lg text-slate-600 font-medium">{strings.uploadHint}</p>
             <p className="text-sm text-slate-400 mt-2">{strings.uploadFormats}</p>
           </div>
+          {preloading && (
+            <div className="mt-6 bg-white/80 backdrop-blur rounded-xl shadow p-4 text-center">
+              <p className="text-sm text-slate-500">{lang === 'zh' ? '正在预加载 AI 模型...' : 'Preloading AI model...'}</p>
+              <div className="mt-2 h-1.5 bg-slate-200 rounded-full overflow-hidden w-48 mx-auto">
+                <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${preloadProgress}%` }} />
+              </div>
+            </div>
+          )}
           <input
             ref={fileInputRef}
             type="file"
@@ -379,6 +414,14 @@ export default function App() {
             <div className="bg-white/80 backdrop-blur rounded-2xl shadow-lg p-12 text-center">
               <div className="inline-block w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4" />
               <p className="text-slate-600">{strings.removing}</p>
+              {removingProgress && (
+                <div className="mt-3 w-64 mx-auto">
+                  <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                    <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${removingProgress.progress}%` }} />
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">{removingProgress.progress}%</p>
+                </div>
+              )}
             </div>
           ) : (
             <>
