@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import imglyRemoveBackground from '@imgly/background-removal'
+import { removeBackground } from '@imgly/background-removal'
 import { jsPDF } from 'jspdf'
 
 // --- Types & Constants ---
@@ -255,7 +255,7 @@ export default function App() {
     setStep('edit')
     setRemoving(true)
     try {
-      const blob = await (imglyRemoveBackground as any)(file)
+      const blob = await removeBackground(file)
       const url = URL.createObjectURL(blob)
       const img = await loadImage(url)
       const canvas = document.createElement('canvas')
