@@ -301,8 +301,8 @@ export default function App() {
     return () => { cancelled = true }
   }, [])
 
-  // Process uploaded file
-  const processFile = useCallback(async (file: File) => {
+  // Process uploaded file with retry
+  const processFile = useCallback(async (file: File, attempt = 1) => {
     setOriginalFile(file)
     setOriginalUrl(URL.createObjectURL(file))
     setStep('edit')
@@ -330,8 +330,13 @@ export default function App() {
       originalCutoutRef.current = orig
       URL.revokeObjectURL(url)
     } catch (err) {
-      console.error('Background removal failed:', err)
-      alert(lang === 'zh' ? '背景去除失败，请重试' : 'Background removal failed, please retry')
+      console.error(`Background removal failed (attempt ${attempt}):`, err)
+      if (attempt < 2) {
+        setRemovingProgress({ stage: 'retry', progress: 0 })
+        await new Promise(r => setTimeout(r, 2000))
+        return processFile(file, attempt + 1)
+      }
+      alert(lang === 'zh' ? '背景去除失败，可能是网络问题（模型下载约40MB）。请检查网络后重试，或尝试使用 VPN。' : 'Background removal failed. This is likely a network issue (model download ~40MB). Please check your connection and retry, or try using a VPN.')
       setStep('upload')
     } finally {
       setRemoving(false)
