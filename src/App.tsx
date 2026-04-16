@@ -114,12 +114,22 @@ async function detectAndCrop(canvas: HTMLCanvasElement, targetRatio: number): Pr
     const faceCX = faceBox.x + faceBox.width / 2
     const faceCY = faceBox.y + faceBox.height / 2
     const faceSize = Math.max(faceBox.width, faceBox.height)
-    const padFactor = 1.8
+    // Wider/aspect ratios need more vertical padding to show body
+    const padFactor = targetRatio >= 0.9 ? 2.5 : targetRatio >= 0.7 ? 1.8 : 1.6
 
-    cropW = faceSize * padFactor
-    cropH = cropW / targetRatio
+    // Calculate crop based on the limiting dimension
+    let baseSize = faceSize * padFactor
+    if (targetRatio >= 0.85) {
+      // Square or near-square: base on height to ensure enough vertical space
+      cropH = baseSize
+      cropW = cropH * targetRatio
+    } else {
+      // Portrait: base on width
+      cropW = baseSize
+      cropH = cropW / targetRatio
+    }
 
-    const desiredFaceY = cropH * 0.35
+    const desiredFaceY = cropH * 0.32
     cropY = faceCY - desiredFaceY
     cropX = faceCX - cropW / 2
 
