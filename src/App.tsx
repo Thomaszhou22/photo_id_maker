@@ -363,19 +363,20 @@ export default function App() {
     const ctx = cutoutCanvas.getContext('2d')!
     setEditHistory([ctx.getImageData(0, 0, cutoutCanvas.width, cutoutCanvas.height)])
     setEditing(true)
-    // Initialize edit canvas after render
-    requestAnimationFrame(() => {
-      const ec = editCanvasRef.current
-      if (ec && cutoutCanvas) {
-        // Scale to fit max 400px width
-        const maxW = 400
-        const scale = Math.min(maxW / cutoutCanvas.width, maxW / cutoutCanvas.height, 1)
-        ec.width = Math.round(cutoutCanvas.width * scale)
-        ec.height = Math.round(cutoutCanvas.height * scale)
-        ec.getContext('2d')!.drawImage(cutoutCanvas, 0, 0, ec.width, ec.height)
-      }
-    })
   }, [cutoutCanvas])
+
+  // Initialize edit canvas when entering edit mode
+  useEffect(() => {
+    if (!editing || !cutoutCanvas) return
+    const ec = editCanvasRef.current
+    if (!ec) return
+    // Scale to fit max 400px width
+    const maxW = 400
+    const scale = Math.min(maxW / cutoutCanvas.width, maxW / cutoutCanvas.height, 1)
+    ec.width = Math.round(cutoutCanvas.width * scale)
+    ec.height = Math.round(cutoutCanvas.height * scale)
+    ec.getContext('2d')!.drawImage(cutoutCanvas, 0, 0, ec.width, ec.height)
+  }, [editing, cutoutCanvas])
 
   const applyEditing = useCallback(() => {
     if (!cutoutCanvas) return
