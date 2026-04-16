@@ -108,41 +108,52 @@ async function detectAndCrop(canvas: HTMLCanvasElement, targetRatio: number): Pr
   const srcW = canvas.width
   const srcH = canvas.height
 
-  let cropX: number, cropY: number, cropW: number, cropH: number
+  // Step 1: Find the person region (always include full body)
+  let personW: number, personH: number, personX: number, personY: number
 
   if (faceBox) {
-    const faceCX = faceBox.x + faceBox.width / 2
-    const faceCY = faceBox.y + faceBox.height / 2
-    const faceSize = Math.max(faceBox.width, faceBox.height)
-    // Wider/aspect ratios need more vertical padding to show body
-    const padFactor = targetRatio >= 0.9 ? 2.5 : targetRatio >= 0.7 ? 1.8 : 1.6
+    // Estimate full person region from face position:
+    // Face top → top of head (~30% above face), face bottom → extend down for body
+    const headTop = faceBox.y - faceBox.height * 0.35
+    const bodyBottom = Math.min(faceBox.y + faceBox.height * 3.5, srcH)
+    const personLeft = Math.max(0, faceBox.x - faceBox.width * 0.8)
+    const personRight = Math.min(srcW, faceBox.x + faceBox.width * 1.8)
 
-    // Calculate crop based on the limiting dimension
-    let baseSize = faceSize * padFactor
-    if (targetRatio >= 0.85) {
-      // Square or near-square: base on height to ensure enough vertical space
-      cropH = baseSize
-      cropW = cropH * targetRatio
-    } else {
-      // Portrait: base on width
-      cropW = baseSize
-      cropH = cropW / targetRatio
-    }
-
-    const desiredFaceY = cropH * 0.32
-    cropY = faceCY - desiredFaceY
-    cropX = faceCX - cropW / 2
-
-    cropX = Math.max(0, Math.min(srcW - cropW, cropX))
-    cropY = Math.max(0, Math.min(srcH - cropH, cropY))
-
-    if (cropW > srcW || cropH > srcH) {
-      cropW = srcW
-      cropH = srcW / targetRatio
-      cropX = 0
-      cropY = Math.max(0, (srcH - cropH) / 2)
-    }
+    personW = personRight - personLeft
+    personH = bodyBottom - headTop
+    personX = personLeft
+    personY = headTop
   } else {
+    personW = srcW
+    personH = srcH
+    personX = 0
+    personY = 0
+  }
+
+  // Step 2: Fit person region into target ratio (contain, never crop)
+  const personRatio = personW / personH
+  let cropW: number, cropH: number
+
+  if (personRatio > targetRatio) {
+    // Person is wider than target → add top/bottom padding
+    cropW = personW
+    cropH = personW / targetRatio
+  } else {
+    // Person is taller than target → add left/right padding
+    cropH = personH
+    cropW = personH * targetRatio
+  }
+
+  // Center the person in the crop area
+  let cropX = personX + (personW - cropW) / 2
+  let cropY = personY + (personH - cropH) / 2
+
+  // Keep within image bounds
+  cropX = Math.max(0, Math.min(srcW - cropW, cropX))
+  cropY = Math.max(0, Math.min(srcH - cropH, cropY))
+
+  // Fallback: if crop exceeds image, use contain on full image
+  if (cropW > srcW || cropH > srcH) {
     if (srcW / srcH > targetRatio) {
       cropH = srcH
       cropW = srcH * targetRatio
