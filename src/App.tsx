@@ -35,6 +35,7 @@ const SIZE_PRESETS: SizePreset[] = [
 // --- Translations ---
 const t = (lang: Lang) => ({
   title: lang === 'zh' ? '证件照制作工具' : 'ID Photo Maker',
+  subtitle: lang === 'zh' ? 'AI 智能抠图，一键生成标准证件照' : 'AI background removal, generate standard ID photos in one click',
   uploadTitle: lang === 'zh' ? '上传照片' : 'Upload Photo',
   uploadHint: lang === 'zh' ? '拖拽照片到此处，或点击选择文件' : 'Drag & drop a photo here, or click to browse',
   uploadFormats: lang === 'zh' ? '支持 JPG、PNG、WebP 格式' : 'Supports JPG, PNG, WebP',
@@ -58,6 +59,14 @@ const t = (lang: Lang) => ({
   paintMode: lang === 'zh' ? '画笔（擦除）' : 'Brush (Erase)',
   undoEdit: lang === 'zh' ? '撤销' : 'Undo',
   applyEdit: lang === 'zh' ? '应用修改' : 'Apply Changes',
+  step1: lang === 'zh' ? '第 1 步' : 'Step 1',
+  step2: lang === 'zh' ? '第 2 步' : 'Step 2',
+  step3: lang === 'zh' ? '第 3 步' : 'Step 3',
+  stepUpload: lang === 'zh' ? '上传照片' : 'Upload Photo',
+  stepEdit: lang === 'zh' ? '编辑调整' : 'Edit & Adjust',
+  stepDownload: lang === 'zh' ? '下载保存' : 'Download',
+  originalPhoto: lang === 'zh' ? '原始照片' : 'Original Photo',
+  footerText: lang === 'zh' ? '基于 AI 的证件照生成工具 · 本地处理，照片不会上传到任何服务器' : 'AI-powered ID photo generator · All processing happens locally in your browser',
 })
 
 // --- Helper: load image from File or URL ---
@@ -101,7 +110,6 @@ async function detectAndCrop(canvas: HTMLCanvasElement, targetRatio: number): Pr
   let cropX: number, cropY: number, cropW: number, cropH: number
 
   if (faceBox) {
-    // Crop around face with padding, targeting the desired aspect ratio
     const faceCX = faceBox.x + faceBox.width / 2
     const faceCY = faceBox.y + faceBox.height / 2
     const faceSize = Math.max(faceBox.width, faceBox.height)
@@ -110,16 +118,13 @@ async function detectAndCrop(canvas: HTMLCanvasElement, targetRatio: number): Pr
     cropW = faceSize * padFactor
     cropH = cropW / targetRatio
 
-    // Ensure face is in upper third
     const desiredFaceY = cropH * 0.35
     cropY = faceCY - desiredFaceY
     cropX = faceCX - cropW / 2
 
-    // Clamp to image bounds
     cropX = Math.max(0, Math.min(srcW - cropW, cropX))
     cropY = Math.max(0, Math.min(srcH - cropH, cropY))
 
-    // If clamping caused issues, refit
     if (cropW > srcW || cropH > srcH) {
       cropW = srcW
       cropH = srcW / targetRatio
@@ -127,7 +132,6 @@ async function detectAndCrop(canvas: HTMLCanvasElement, targetRatio: number): Pr
       cropY = Math.max(0, (srcH - cropH) / 2)
     }
   } else {
-    // Center crop
     if (srcW / srcH > targetRatio) {
       cropH = srcH
       cropW = srcH * targetRatio
@@ -163,7 +167,6 @@ function compositePhoto(
     ctx.fillRect(0, 0, out.width, out.height)
   }
 
-  // Draw cutout centered and covering
   const srcRatio = cutoutCanvas.width / cutoutCanvas.height
   const dstRatio = size.wPx / size.hPx
 
@@ -199,10 +202,8 @@ function generatePrintPDF(photoCanvas: HTMLCanvasElement, size: SizePreset, lang
 
   const imgData = photoCanvas.toDataURL('image/png')
 
-  // First page
   pdf.addImage(imgData, 'PNG', startX, startY, photoW, photoH)
 
-  // Add cut lines on first page
   const drawCutLines = () => {
     pdf.setDrawColor(200, 200, 200)
     pdf.setLineWidth(0.1)
@@ -238,6 +239,22 @@ const checkerStyle = {
   `,
   backgroundSize: '16px 16px',
   backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px',
+}
+
+// --- Step indicator badge ---
+function StepBadge({ step, currentStep, label, num }: { step: Step; currentStep: Step; label: string; num: string }) {
+  const isActive = step === currentStep
+  const isPast = ['upload','edit','download'].indexOf(currentStep) > ['upload','edit','download'].indexOf(step)
+  return (
+    <div className="flex items-center gap-2">
+      <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold transition-all ${
+        isPast ? 'bg-blue-600 text-white' : isActive ? 'bg-blue-600 text-white shadow-md shadow-blue-600/25' : 'bg-slate-200 text-slate-400'
+      }`}>
+        {isPast ? '✓' : num.replace('Step ', '').replace('第 ', '').replace(' 步', '')}
+      </span>
+      <span className={`text-sm font-semibold ${isActive ? 'text-slate-900' : isPast ? 'text-blue-600' : 'text-slate-400'}`}>{label}</span>
+    </div>
+  )
 }
 
 // ==================== APP ====================
@@ -305,7 +322,6 @@ export default function App() {
       const ctx = canvas.getContext('2d')!
       ctx.drawImage(img, 0, 0)
       setCutoutCanvas(canvas)
-      // Save original for eraser restore
       const orig = document.createElement('canvas')
       orig.width = canvas.width
       orig.height = canvas.height
@@ -359,7 +375,6 @@ export default function App() {
   // --- Manual editing on cutout canvas ---
   const startEditing = useCallback(() => {
     if (!cutoutCanvas) return
-    // Save current state for undo
     const ctx = cutoutCanvas.getContext('2d')!
     setEditHistory([ctx.getImageData(0, 0, cutoutCanvas.width, cutoutCanvas.height)])
     setEditing(true)
@@ -370,7 +385,6 @@ export default function App() {
     if (!editing || !cutoutCanvas) return
     const ec = editCanvasRef.current
     if (!ec) return
-    // Scale to fit max 400px width
     const maxW = 400
     const scale = Math.min(maxW / cutoutCanvas.width, maxW / cutoutCanvas.height, 1)
     ec.width = Math.round(cutoutCanvas.width * scale)
@@ -382,7 +396,6 @@ export default function App() {
     if (!cutoutCanvas) return
     setEditing(false)
     setEditHistory([])
-    // Force re-render of final canvas
     setCutoutCanvas((prev) => {
       if (!prev) return prev
       const copy = document.createElement('canvas')
@@ -399,7 +412,6 @@ export default function App() {
     const ctx = cutoutCanvas.getContext('2d')!
     ctx.putImageData(prev, 0, 0)
     setEditHistory((h) => h.slice(0, -1))
-    // Update display
     const ec = editCanvasRef.current
     if (ec) {
       const ectx = ec.getContext('2d')!
@@ -420,7 +432,6 @@ export default function App() {
     const r = brushRadius * scaleX
     const ctx = cutout.getContext('2d')!
     if (isEraser) {
-      // Restore original pixels from the saved cutout
       const orig = originalCutoutRef.current
       if (orig) {
         ctx.save()
@@ -431,7 +442,6 @@ export default function App() {
         ctx.restore()
       }
     } else {
-      // Erase (make transparent)
       ctx.save()
       ctx.globalCompositeOperation = 'destination-out'
       ctx.beginPath()
@@ -439,7 +449,6 @@ export default function App() {
       ctx.fill()
       ctx.restore()
     }
-    // Mirror to edit display canvas
     const ectx = ec.getContext('2d')!
     ectx.clearRect(0, 0, ec.width, ec.height)
     ectx.drawImage(cutout, 0, 0, ec.width, ec.height)
@@ -447,7 +456,6 @@ export default function App() {
 
   const editCanvasMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     isDrawingRef.current = true
-    // Save state before drawing for undo
     if (cutoutCanvas) {
       const ctx = cutoutCanvas.getContext('2d')!
       setEditHistory((prev) => [...prev, ctx.getImageData(0, 0, cutoutCanvas.width, cutoutCanvas.height)])
@@ -465,290 +473,355 @@ export default function App() {
     setOriginalFile(null)
   }
 
-  // --- Language Toggle ---
-  const LangToggle = () => (
-    <button
-      onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
-      className="fixed top-4 right-4 z-50 px-3 py-1.5 rounded-full bg-white/80 backdrop-blur text-sm font-medium text-slate-700 shadow hover:bg-white transition-all border border-slate-200"
-    >
-      {lang === 'zh' ? 'EN' : '中文'}
-    </button>
+  // --- Shared Header ---
+  const Header = () => (
+    <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/80 backdrop-blur-md shadow-sm">
+      <div className="max-w-2xl mx-auto flex items-center justify-between px-6 py-3">
+        <div className="flex items-center gap-3">
+          <div className="rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/20 w-9 h-9 flex items-center justify-center text-lg">
+            📷
+          </div>
+          <h1 className="text-lg font-bold tracking-tight text-slate-900">{strings.title}</h1>
+        </div>
+        {/* Language toggle pill */}
+        <div className="rounded-lg border border-slate-200/90 bg-slate-50/90 p-0.5 shadow-sm flex items-center">
+          <button
+            onClick={() => setLang('zh')}
+            className={`px-3 py-1.5 text-sm font-semibold rounded-md transition-all ${lang === 'zh' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            中文
+          </button>
+          <button
+            onClick={() => setLang('en')}
+            className={`px-3 py-1.5 text-sm font-semibold rounded-md transition-all ${lang === 'en' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            EN
+          </button>
+        </div>
+      </div>
+      {/* Step indicator */}
+      <div className="max-w-2xl mx-auto px-6 pb-3 flex items-center gap-6">
+        <StepBadge step="upload" currentStep={step} label={strings.stepUpload} num={strings.step1} />
+        <div className="flex-1 h-px bg-slate-200" />
+        <StepBadge step="edit" currentStep={step} label={strings.stepEdit} num={strings.step2} />
+        <div className="flex-1 h-px bg-slate-200" />
+        <StepBadge step="download" currentStep={step} label={strings.stepDownload} num={strings.step3} />
+      </div>
+    </header>
   )
 
-  // --- UPLOAD STEP ---
+  // --- Shared Footer ---
+  const Footer = () => (
+    <footer className="border-t border-slate-200/80 bg-white/80 backdrop-blur-md py-6 mt-12">
+      <p className="text-center text-sm text-slate-500">{strings.footerText}</p>
+    </footer>
+  )
+
+  // ==================== UPLOAD STEP ====================
   if (step === 'upload') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-slate-200 flex items-center justify-center p-4">
-        <LangToggle />
-        <div className="w-full max-w-lg">
-          <h1 className="text-3xl font-bold text-center text-slate-800 mb-8">
-            📷 {strings.title}
-          </h1>
-          <div
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className="border-2 border-dashed border-blue-300 rounded-2xl bg-white/70 backdrop-blur-sm p-16 text-center cursor-pointer hover:border-blue-500 hover:bg-white/90 transition-all shadow-lg hover:shadow-xl group"
-          >
-            <div className="text-6xl mb-4 group-hover:scale-110 transition-transform">🖼️</div>
-            <p className="text-lg text-slate-600 font-medium">{strings.uploadHint}</p>
-            <p className="text-sm text-slate-400 mt-2">{strings.uploadFormats}</p>
-          </div>
-          {preloading && (
-            <div className="mt-6 bg-white/80 backdrop-blur rounded-xl shadow p-4 text-center">
-              <p className="text-sm text-slate-500">{lang === 'zh' ? '正在预加载 AI 模型...' : 'Preloading AI model...'}</p>
-              <div className="mt-2 h-1.5 bg-slate-200 rounded-full overflow-hidden w-48 mx-auto">
-                <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${preloadProgress}%` }} />
-              </div>
+      <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white font-sans text-slate-900 antialiased flex flex-col">
+        <Header />
+        <main className="flex-1 flex items-center justify-center p-6">
+          <div className="w-full max-w-lg">
+            {/* Hero */}
+            <div className="text-center mb-8">
+              <h2 className="text-3xl font-bold tracking-tight text-slate-900 mb-2">{strings.title}</h2>
+              <p className="text-slate-500">{strings.subtitle}</p>
             </div>
-          )}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            className="hidden"
-            onChange={handleFileChange}
-          />
-        </div>
+
+            {/* Upload area */}
+            <div
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className="border-2 border-dashed border-slate-300 rounded-2xl bg-slate-50/50 p-16 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-all duration-300 group"
+            >
+              <div className="rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/20 w-16 h-16 mx-auto mb-5 flex items-center justify-center text-3xl group-hover:scale-105 transition-transform duration-300">
+                🖼️
+              </div>
+              <p className="text-lg font-semibold text-slate-700 mb-1">{strings.uploadHint}</p>
+              <p className="text-sm text-slate-400">{strings.uploadFormats}</p>
+            </div>
+
+            {preloading && (
+              <div className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm text-center">
+                <p className="text-sm text-slate-500 mb-3">{lang === 'zh' ? '正在预加载 AI 模型...' : 'Preloading AI model...'}</p>
+                <div className="h-2 bg-slate-200 rounded-full overflow-hidden w-64 mx-auto">
+                  <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${preloadProgress}%` }} />
+                </div>
+              </div>
+            )}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+          </div>
+        </main>
+        <Footer />
       </div>
     )
   }
 
-  // --- EDIT STEP ---
+  // ==================== EDIT STEP ====================
   if (step === 'edit') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-slate-200 p-4">
-        <LangToggle />
-        <div className="max-w-2xl mx-auto pt-16">
-          <h2 className="text-2xl font-bold text-slate-800 mb-6 text-center">{strings.uploadTitle}</h2>
+      <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white font-sans text-slate-900 antialiased flex flex-col">
+        <Header />
+        <main className="flex-1 p-6">
+          <div className="max-w-2xl mx-auto space-y-5 pt-6">
 
-          {/* Original thumbnail */}
-          <div className="mb-6">
-            <p className="text-sm text-slate-500 mb-2">{strings.uploadHint}</p>
-            <img src={originalUrl} alt="original" className="w-24 h-24 object-cover rounded-lg shadow border" />
-          </div>
-
-          {/* Background removal status */}
-          {removing ? (
-            <div className="bg-white/80 backdrop-blur rounded-2xl shadow-lg p-12 text-center">
-              <div className="inline-block w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4" />
-              <p className="text-slate-600">{strings.removing}</p>
-              {removingProgress && (
-                <div className="mt-3 w-64 mx-auto">
-                  <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
-                    <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${removingProgress.progress}%` }} />
+            {/* Background removal status */}
+            {removing ? (
+              <div className="rounded-2xl border border-slate-200/80 bg-white p-12 shadow-sm text-center">
+                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-50 mb-4">
+                  <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                </div>
+                <p className="text-slate-600 font-medium">{strings.removing}</p>
+                {removingProgress && (
+                  <div className="mt-4 w-64 mx-auto">
+                    <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                      <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${removingProgress.progress}%` }} />
+                    </div>
+                    <p className="mt-1.5 text-sm text-slate-400">{removingProgress.progress}%</p>
                   </div>
-                  <p className="mt-1 text-xs text-slate-400">{removingProgress.progress}%</p>
-                </div>
-              )}
-            </div>
-          ) : (
-            <>
-              {/* Background color */}
-              <div className="bg-white/80 backdrop-blur rounded-2xl shadow-lg p-6 mb-4">
-                <p className="text-sm font-semibold text-slate-700 mb-3">{strings.bgColor}</p>
-                <div className="flex gap-2 flex-wrap">
-                  {(['white', 'blue', 'red', 'transparent'] as BgColor[]).map((c) => (
-                    <button
-                      key={c}
-                      onClick={() => setBgColor(c)}
-                      className={`w-10 h-10 rounded-xl border-2 transition-all ${
-                        bgColor === c ? 'border-blue-500 scale-110 shadow-lg' : 'border-slate-300 hover:scale-105'
-                      }`}
-                      style={c === 'transparent' ? checkerStyle : { backgroundColor: BG_COLORS[c] }}
-                      title={strings[c]}
-                    />
-                  ))}
-                  <span className="flex items-center ml-2 text-sm text-slate-500">{strings[bgColor]}</span>
-                </div>
-              </div>
-
-              {/* Size presets */}
-              <div className="bg-white/80 backdrop-blur rounded-2xl shadow-lg p-6 mb-4">
-                <p className="text-sm font-semibold text-slate-700 mb-3">{strings.photoSize}</p>
-                <div className="flex gap-2 flex-wrap">
-                  {SIZE_PRESETS.map((s, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setSizeIndex(i)}
-                      className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                        sizeIndex === i
-                          ? 'bg-blue-500 text-white shadow-lg'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      {lang === 'zh' ? s.labelZh : s.labelEn}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Preview */}
-              {finalCanvas && (
-                <div className="bg-white/80 backdrop-blur rounded-2xl shadow-lg p-6 mb-4">
-                  <p className="text-sm font-semibold text-slate-700 mb-3">{strings.preview}</p>
-                  <div className="flex justify-center">
-                    <div
-                      className="relative border border-slate-200 rounded-lg overflow-hidden shadow"
-                      style={{
-                        width: 200,
-                        height: 200 * (size.hPx / size.wPx),
-                        ...(bgColor === 'transparent' ? checkerStyle : {}),
-                      }}
-                    >
-                      <img
-                        src={finalCanvas.toDataURL()}
-                        alt="preview"
-                        className="absolute inset-0 w-full h-full object-contain"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Manual Edit */}
-              <div className="bg-white/80 backdrop-blur rounded-2xl shadow-lg p-6 mb-4">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm font-semibold text-slate-700">{strings.manualEdit}</p>
-                  {!editing ? (
-                    <button
-                      onClick={startEditing}
-                      className="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition-all"
-                    >
-                      ✏️ {strings.manualEdit}
-                    </button>
-                  ) : (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={undoEdit}
-                        disabled={editHistory.length === 0}
-                        className="px-3 py-1.5 rounded-lg bg-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-300 disabled:opacity-50 transition-all"
-                      >
-                        ↩️ {strings.undoEdit}
-                      </button>
-                      <button
-                        onClick={applyEditing}
-                        className="px-3 py-1.5 rounded-lg bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 transition-all"
-                      >
-                        ✓ {strings.applyEdit}
-                      </button>
-                    </div>
-                  )}
-                </div>
-                {editing && (
-                  <>
-                    <p className="text-xs text-slate-400 mb-3">{strings.manualEditHint}</p>
-                    <div className="flex items-center gap-3 mb-3 flex-wrap">
-                      <button
-                        onClick={() => setIsEraser(!isEraser)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${isEraser ? 'bg-slate-700 text-white' : 'bg-red-500 text-white'}`}
-                      >
-                        {isEraser ? '🧹 ' + strings.eraserMode : '🖌️ ' + strings.paintMode}
-                      </button>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-500">{strings.brushSize}</span>
-                        <input
-                          type="range"
-                          min={3}
-                          max={50}
-                          value={brushRadius}
-                          onChange={(e) => setBrushRadius(Number(e.target.value))}
-                          className="w-24"
-                        />
-                        <span className="text-xs text-slate-400 w-6">{brushRadius}</span>
-                      </div>
-                    </div>
-                    <div className="flex justify-center">
-                      <canvas
-                        ref={editCanvasRef}
-                        onMouseDown={editCanvasMouseDown}
-                        onMouseMove={editCanvasDraw}
-                        onMouseUp={() => { isDrawingRef.current = false }}
-                        onMouseLeave={() => { isDrawingRef.current = false }}
-                        className="rounded-lg border-2 border-dashed border-slate-300 cursor-crosshair max-w-full"
-                        style={{ maxHeight: 400 }}
-                      />
-                    </div>
-                  </>
                 )}
               </div>
+            ) : (
+              <>
+                {/* Original thumbnail */}
+                <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+                  <p className="text-sm font-semibold text-slate-700 mb-3">{strings.originalPhoto}</p>
+                  <img src={originalUrl} alt="original" className="w-20 h-20 object-cover rounded-xl shadow-sm border border-slate-200/80" />
+                </div>
 
-              {/* Nav */}
-              <div className="flex justify-between mt-6">
-                <button
-                  onClick={goToUpload}
-                  className="px-6 py-2.5 rounded-xl bg-slate-200 text-slate-700 font-medium hover:bg-slate-300 transition-all"
-                >
-                  ← {strings.back}
-                </button>
-                <button
-                  onClick={() => setStep('download')}
-                  disabled={!finalCanvas}
-                  className="px-6 py-2.5 rounded-xl bg-blue-500 text-white font-medium hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
-                >
-                  {strings.next} →
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+                {/* Background color */}
+                <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+                  <p className="text-sm font-semibold text-slate-700 mb-4">{strings.bgColor}</p>
+                  <div className="flex gap-3 flex-wrap">
+                    {(['white', 'blue', 'red', 'transparent'] as BgColor[]).map((c) => (
+                      <button
+                        key={c}
+                        onClick={() => setBgColor(c)}
+                        className={`flex flex-col items-center gap-1.5 group transition-all duration-300 ${bgColor === c ? 'scale-105' : 'hover:scale-105'}`}
+                      >
+                        <div
+                          className={`w-12 h-12 rounded-xl border-2 transition-all shadow-sm ${
+                            bgColor === c ? 'border-blue-500 ring-2 ring-blue-500/20 shadow-md' : 'border-slate-200'
+                          }`}
+                          style={c === 'transparent' ? checkerStyle : { backgroundColor: BG_COLORS[c] }}
+                        />
+                        <span className={`text-xs font-semibold transition-colors ${bgColor === c ? 'text-blue-600' : 'text-slate-400'}`}>
+                          {strings[c]}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Size presets */}
+                <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+                  <p className="text-sm font-semibold text-slate-700 mb-4">{strings.photoSize}</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {SIZE_PRESETS.map((s, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setSizeIndex(i)}
+                        className={`rounded-full px-4 py-2 text-sm font-semibold transition-all duration-300 ${
+                          sizeIndex === i
+                            ? 'bg-blue-600 text-white shadow-md shadow-blue-600/25'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {lang === 'zh' ? s.labelZh : s.labelEn}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Preview */}
+                {finalCanvas && (
+                  <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+                    <p className="text-sm font-semibold text-slate-700 mb-4">{strings.preview}</p>
+                    <div className="flex justify-center">
+                      <div
+                        className="relative rounded-xl border border-slate-200/80 overflow-hidden shadow-sm"
+                        style={{
+                          width: 200,
+                          height: 200 * (size.hPx / size.wPx),
+                          ...(bgColor === 'transparent' ? checkerStyle : { backgroundColor: BG_COLORS[bgColor] }),
+                        }}
+                      >
+                        <img
+                          src={finalCanvas.toDataURL()}
+                          alt="preview"
+                          className="absolute inset-0 w-full h-full object-contain"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Manual Edit */}
+                <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-sm font-semibold text-slate-700">{strings.manualEdit}</p>
+                    {!editing ? (
+                      <button
+                        onClick={startEditing}
+                        className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-all"
+                      >
+                        ✏️ {strings.manualEdit}
+                      </button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={undoEdit}
+                          disabled={editHistory.length === 0}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition-all"
+                        >
+                          ↩️ {strings.undoEdit}
+                        </button>
+                        <button
+                          onClick={applyEditing}
+                          className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-blue-700 hover:shadow-lift"
+                        >
+                          ✓ {strings.applyEdit}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {editing && (
+                    <>
+                      <p className="text-sm text-slate-400 mb-3">{strings.manualEditHint}</p>
+                      <div className="flex items-center gap-3 mb-3 flex-wrap">
+                        <button
+                          onClick={() => setIsEraser(!isEraser)}
+                          className={`rounded-full px-4 py-2 text-sm font-semibold transition-all duration-300 ${
+                            isEraser ? 'bg-slate-900 text-white shadow-md' : 'bg-red-500 text-white shadow-md shadow-red-500/25'
+                          }`}
+                        >
+                          {isEraser ? '🧹 ' + strings.eraserMode : '🖌️ ' + strings.paintMode}
+                        </button>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-slate-500">{strings.brushSize}</span>
+                          <input
+                            type="range"
+                            min={3}
+                            max={50}
+                            value={brushRadius}
+                            onChange={(e) => setBrushRadius(Number(e.target.value))}
+                            className="w-24 accent-blue-600"
+                          />
+                          <span className="text-sm text-slate-400 w-6">{brushRadius}</span>
+                        </div>
+                      </div>
+                      <div className="flex justify-center">
+                        <canvas
+                          ref={editCanvasRef}
+                          onMouseDown={editCanvasMouseDown}
+                          onMouseMove={editCanvasDraw}
+                          onMouseUp={() => { isDrawingRef.current = false }}
+                          onMouseLeave={() => { isDrawingRef.current = false }}
+                          className="rounded-xl border border-slate-200 cursor-crosshair max-w-full"
+                          style={{ maxHeight: 400 }}
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Nav */}
+                <div className="flex justify-between pt-2">
+                  <button
+                    onClick={goToUpload}
+                    className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-all"
+                  >
+                    ← {strings.back}
+                  </button>
+                  <button
+                    onClick={() => setStep('download')}
+                    disabled={!finalCanvas}
+                    className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-blue-700 hover:shadow-lift disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {strings.next} →
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </main>
+        <Footer />
       </div>
     )
   }
 
-  // --- DOWNLOAD STEP ---
+  // ==================== DOWNLOAD STEP ====================
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-slate-200 p-4">
-      <LangToggle />
-      <div className="max-w-lg mx-auto pt-16">
-        <h2 className="text-2xl font-bold text-slate-800 mb-6 text-center">{strings.downloadPhoto.split(' ')[0]}</h2>
-
-        {finalCanvas && (
-          <div className="bg-white/80 backdrop-blur rounded-2xl shadow-lg p-6 mb-6">
-            <div className="flex justify-center">
-              <div
-                className="relative border border-slate-200 rounded-lg overflow-hidden shadow-lg"
-                style={{
-                  width: 240,
-                  height: 240 * (size.hPx / size.wPx),
-                  ...(bgColor === 'transparent' ? checkerStyle : {}),
-                }}
-              >
-                <img
-                  src={finalCanvas.toDataURL()}
-                  alt="final"
-                  className="absolute inset-0 w-full h-full object-contain"
-                />
-              </div>
-            </div>
-            <p className="text-center text-sm text-slate-500 mt-4">
-              {lang === 'zh' ? size.labelZh : size.labelEn} · {size.wPx}×{size.hPx}px
-            </p>
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white font-sans text-slate-900 antialiased flex flex-col">
+      <Header />
+      <main className="flex-1 p-6">
+        <div className="max-w-lg mx-auto pt-6 space-y-5">
+          {/* Title */}
+          <div className="text-center">
+            <h2 className="text-3xl font-bold tracking-tight text-slate-900">{strings.downloadPhoto.split(' (')[0]}</h2>
           </div>
-        )}
 
-        <div className="space-y-3 mb-6">
+          {/* Preview card */}
+          {finalCanvas && (
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+              <div className="flex justify-center">
+                <div
+                  className="relative rounded-xl border border-slate-200/80 overflow-hidden shadow-sm"
+                  style={{
+                    width: 240,
+                    height: 240 * (size.hPx / size.wPx),
+                    ...(bgColor === 'transparent' ? checkerStyle : {}),
+                  }}
+                >
+                  <img
+                    src={finalCanvas.toDataURL()}
+                    alt="final"
+                    className="absolute inset-0 w-full h-full object-contain"
+                  />
+                </div>
+              </div>
+              <p className="text-center text-sm text-slate-500 mt-4">
+                {lang === 'zh' ? size.labelZh : size.labelEn} · {size.wPx}×{size.hPx}px
+              </p>
+            </div>
+          )}
+
+          {/* Download buttons */}
+          <div className="space-y-3">
+            <button
+              onClick={handleDownloadPNG}
+              className="w-full rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-semibold text-white shadow-soft transition hover:bg-blue-700 hover:shadow-lift flex items-center justify-center gap-2.5"
+            >
+              <span className="text-lg">📥</span> {strings.downloadPhoto}
+            </button>
+            <button
+              onClick={handleDownloadPDF}
+              className="w-full rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-3.5 text-sm font-semibold text-white shadow-soft transition hover:from-emerald-700 hover:to-teal-700 hover:shadow-lift flex items-center justify-center gap-2.5"
+            >
+              <span className="text-lg">🖨️</span> {strings.downloadPrint}
+            </button>
+          </div>
+
+          {/* Back button */}
           <button
-            onClick={handleDownloadPNG}
-            className="w-full px-6 py-3 rounded-xl bg-blue-500 text-white font-medium hover:bg-blue-600 transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+            onClick={() => setStep('edit')}
+            className="w-full rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-all"
           >
-            📥 {strings.downloadPhoto}
-          </button>
-          <button
-            onClick={handleDownloadPDF}
-            className="w-full px-6 py-3 rounded-xl bg-emerald-500 text-white font-medium hover:bg-emerald-600 transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
-          >
-            🖨️ {strings.downloadPrint}
+            ← {strings.backToEdit}
           </button>
         </div>
-
-        <button
-          onClick={() => setStep('edit')}
-          className="w-full px-6 py-2.5 rounded-xl bg-slate-200 text-slate-700 font-medium hover:bg-slate-300 transition-all"
-        >
-          ← {strings.backToEdit}
-        </button>
-      </div>
+      </main>
+      <Footer />
     </div>
   )
 }
