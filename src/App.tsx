@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { Camera } from 'lucide-react'
 import { removeBackground, preload } from '@imgly/background-removal'
 import { jsPDF } from 'jspdf'
@@ -173,13 +173,14 @@ function compositePhoto(
   const srcRatio = cutoutCanvas.width / cutoutCanvas.height
   const dstRatio = size.wPx / size.hPx
 
+  // contain logic: fit entire image without cropping
   let dw: number, dh: number, dx: number, dy: number
   if (srcRatio > dstRatio) {
-    dh = out.height
-    dw = dh * srcRatio
-  } else {
     dw = out.width
     dh = dw / srcRatio
+  } else {
+    dh = out.height
+    dw = dh * srcRatio
   }
   dx = (out.width - dw) / 2
   dy = (out.height - dh) / 2
@@ -292,8 +293,14 @@ export default function App() {
     ;(async () => {
       try {
         setPreloadProgress(10)
+        await new Promise(r => setTimeout(r, 100))
+        setPreloadProgress(30)
         await preload()
-        if (!cancelled) setPreloadProgress(100)
+        if (!cancelled) {
+          setPreloadProgress(90)
+          await new Promise(r => setTimeout(r, 100))
+          setPreloadProgress(100)
+        }
       } catch (e) {
         // Model preload failed silently, will retry on actual use
       } finally {
@@ -305,6 +312,15 @@ export default function App() {
 
   // Process uploaded file with retry
   const processFile = useCallback(async (file: File, attempt = 1) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
+    if (!allowedTypes.includes(file.type)) {
+      alert(lang === 'zh' ? '不支持的文件格式，请上传 JPG、PNG 或 WebP 图片。' : 'Unsupported file format. Please upload a JPG, PNG, or WebP image.')
+      return
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      alert(lang === 'zh' ? '文件太大，请选择 20MB 以内的图片。' : 'File too large. Please select an image under 20MB.')
+      return
+    }
     setOriginalFile(file)
     setOriginalUrl(URL.createObjectURL(file))
     setStep('edit')
@@ -320,8 +336,16 @@ export default function App() {
       const url = URL.createObjectURL(blob)
       const img = await loadImage(url)
       const canvas = document.createElement('canvas')
-      canvas.width = img.naturalWidth
-      canvas.height = img.naturalHeight
+      const MAX_DIM = 2000
+      let drawW = img.naturalWidth
+      let drawH = img.naturalHeight
+      if (Math.max(drawW, drawH) > MAX_DIM) {
+        const scale = MAX_DIM / Math.max(drawW, drawH)
+        drawW = Math.round(drawW * scale)
+        drawH = Math.round(drawH * scale)
+      }
+      canvas.width = drawW
+      canvas.height = drawH
       const ctx = canvas.getContext('2d')!
       ctx.drawImage(img, 0, 0)
       setCutoutCanvas(canvas)
@@ -366,6 +390,10 @@ export default function App() {
     const file = e.target.files?.[0]
     if (file) processFile(file)
   }, [processFile])
+
+  // Cache data URLs to avoid re-generating on every render
+  const previewDataUrl = useMemo(() => finalCanvas?.toDataURL() ?? '', [finalCanvas])
+  const downloadDataUrl = useMemo(() => finalCanvas?.toDataURL() ?? '', [finalCanvas])
 
   const handleDownloadPNG = () => {
     if (!finalCanvas) return
@@ -426,6 +454,7 @@ export default function App() {
       ectx.clearRect(0, 0, ec.width, ec.height)
       ectx.drawImage(cutoutCanvas, 0, 0, ec.width, ec.height)
     }
+    setCutoutCanvas(prev => prev)
   }, [cutoutCanvas, editHistory])
 
   const editCanvasDraw = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -444,7 +473,7 @@ export default function App() {
       if (orig) {
         ctx.save()
         ctx.beginPath()
-        ctx.arc(x - r, y - r, r * 2, 0, Math.PI * 2)
+        ctx.arc(x, y, r, 0, Math.PI * 2)
         ctx.clip()
         ctx.drawImage(orig, 0, 0)
         ctx.restore()
@@ -550,6 +579,7 @@ export default function App() {
               </div>
               <p className="text-lg font-semibold text-slate-700 mb-1">{strings.uploadHint}</p>
               <p className="text-sm text-slate-400">{strings.uploadFormats}</p>
+              <p className="text-xs text-slate-300 mt-2">{lang === 'zh' ? '💡 人脸检测功能在 Chrome 浏览器中效果最佳' : '💡 Face detection works best in Chrome'}</p>
             </div>
 
             {preloading && (
@@ -665,7 +695,7 @@ export default function App() {
                         }}
                       >
                         <img
-                          src={finalCanvas.toDataURL()}
+                          src={previewDataUrl}
                           alt="preview"
                           className="absolute inset-0 w-full h-full object-contain"
                         />
@@ -735,6 +765,9 @@ export default function App() {
                           onMouseMove={editCanvasDraw}
                           onMouseUp={() => { isDrawingRef.current = false }}
                           onMouseLeave={() => { isDrawingRef.current = false }}
+                          onTouchStart={(e) => { e.preventDefault(); isDrawingRef.current = true; if (cutoutCanvas) { const ctx = cutoutCanvas.getContext('2d')!; setEditHistory((prev) => [...prev, ctx.getImageData(0, 0, cutoutCanvas.width, cutoutCanvas.height)]) } const touch = e.touches[0]; editCanvasDraw({ clientX: touch.clientX, clientY: touch.clientY } as React.MouseEvent<HTMLCanvasElement>) }}
+                          onTouchMove={(e) => { e.preventDefault(); const touch = e.touches[0]; editCanvasDraw({ clientX: touch.clientX, clientY: touch.clientY } as React.MouseEvent<HTMLCanvasElement>) }}
+                          onTouchEnd={() => { isDrawingRef.current = false }}
                           className="rounded-xl border border-slate-200 cursor-crosshair max-w-full"
                           style={{ maxHeight: 400 }}
                         />
@@ -792,7 +825,7 @@ export default function App() {
                   }}
                 >
                   <img
-                    src={finalCanvas.toDataURL()}
+                    src={downloadDataUrl}
                     alt="final"
                     className="absolute inset-0 w-full h-full object-contain"
                   />
