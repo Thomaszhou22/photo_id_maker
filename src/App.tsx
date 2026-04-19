@@ -1355,8 +1355,7 @@ export default function App() {
                 {/* Upscale */}
                 {cutoutCanvas && (
                   <div className="rounded-2xl border border-slate-200/60 bg-white/80 backdrop-blur-sm p-4 shadow-soft space-y-3">
-                    {!upscaled ? (
-                      <button
+                    <button
                         onClick={async () => {
                           setUpscaling(true)
                           await new Promise(r => setTimeout(r, 0))
@@ -1374,32 +1373,16 @@ export default function App() {
                           const sCtx = sharp.getContext('2d')!
                           sCtx.filter = 'contrast(1.1) saturate(0.9)'
                           sCtx.drawImage(temp, 0, 0)
-                          setOriginalCutout(cutoutCanvas)
                           setCutoutCanvas(sharp)
                           setUpscaled(true)
                           setUpscaling(false)
                         }}
-                        disabled={upscaling}
+                        disabled={upscaling || upscaled}
                         className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white font-semibold text-sm shadow-lg shadow-purple-600/25 hover:shadow-purple-600/40 transition-all disabled:opacity-50"
                       >
                         <ZoomIn className="h-4 w-4" />
-                        {upscaling ? (lang === 'zh' ? '正在提升...' : 'Upscaling...') : (lang === 'zh' ? '✨ 提升分辨率 (2x)' : '✨ Upscale (2x)')}
+                        {upscaling ? (lang === 'zh' ? '正在提升...' : 'Upscaling...') : upscaled ? (lang === 'zh' ? '✓ 已提升 (2x)' : '✓ Upscaled (2x)') : (lang === 'zh' ? '✨ 提升分辨率 (2x)' : '✨ Upscale (2x)')}
                       </button>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          if (originalCutout) {
-                            setCutoutCanvas(originalCutout)
-                            setOriginalCutout(null)
-                            setUpscaled(false)
-                          }
-                        }}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-slate-300 text-slate-600 font-medium text-sm hover:bg-slate-50 transition-all"
-                      >
-                        <RotateCcw className="h-4 w-4" />
-                        {lang === 'zh' ? '恢复原始' : 'Restore Original'}
-                      </button>
-                    )}
                     <p className="text-xs text-center text-slate-400">{lang === 'zh' ? '使用高质量插值放大 2 倍' : '2x high-quality interpolation'}</p>
                   </div>
                 )}
