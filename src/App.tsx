@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
-import { Camera, Sparkles, Ruler, FileDown, Upload, Image, Shield, ArrowRight, ArrowLeft, Download, Printer, Palette, Sun, CircleDot, RotateCcw, MoveVertical, Info, Shirt, Layers, Package } from 'lucide-react'
+import { Camera, Sparkles, Ruler, FileDown, Upload, Image, Shield, ArrowRight, ArrowLeft, Download, Printer, Palette, Sun, CircleDot, RotateCcw, MoveVertical, Info, Shirt, Layers, Package, ZoomIn } from 'lucide-react'
 import { removeBackground, preload } from '@imgly/background-removal'
 import { jsPDF } from 'jspdf'
 
@@ -467,6 +467,9 @@ export default function App() {
   const [brightness, setBrightness] = useState(100)
   const [contrast, setContrast] = useState(100)
   const [smoothing, setSmoothing] = useState(0)
+  const [upscaled, setUpscaled] = useState(false)
+  const [originalCutout, setOriginalCutout] = useState<HTMLCanvasElement | null>(null)
+  const [upscaling, setUpscaling] = useState(false)
   const [isEraser, setIsEraser] = useState(false)
   const [clothing, setClothing] = useState<Clothing>('none')
   const [cropOffsetY, setCropOffsetY] = useState(0)
@@ -1348,6 +1351,58 @@ export default function App() {
                     })}
                   </div>
                 </div>
+
+                {/* Upscale */}
+                {cutoutCanvas && (
+                  <div className="rounded-2xl border border-slate-200/60 bg-white/80 backdrop-blur-sm p-4 shadow-soft space-y-3">
+                    {!upscaled ? (
+                      <button
+                        onClick={async () => {
+                          setUpscaling(true)
+                          await new Promise(r => setTimeout(r, 0))
+                          const cutout = cutoutCanvas
+                          const temp = document.createElement('canvas')
+                          temp.width = cutout.width * 2
+                          temp.height = cutout.height * 2
+                          const tCtx = temp.getContext('2d')!
+                          tCtx.imageSmoothingEnabled = true
+                          tCtx.imageSmoothingQuality = 'high'
+                          tCtx.drawImage(cutout, 0, 0, temp.width, temp.height)
+                          const sharp = document.createElement('canvas')
+                          sharp.width = temp.width
+                          sharp.height = temp.height
+                          const sCtx = sharp.getContext('2d')!
+                          sCtx.filter = 'contrast(1.1) saturate(0.9)'
+                          sCtx.drawImage(temp, 0, 0)
+                          setOriginalCutout(cutoutCanvas)
+                          setCutoutCanvas(sharp)
+                          setUpscaled(true)
+                          setUpscaling(false)
+                        }}
+                        disabled={upscaling}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white font-semibold text-sm shadow-lg shadow-purple-600/25 hover:shadow-purple-600/40 transition-all disabled:opacity-50"
+                      >
+                        <ZoomIn className="h-4 w-4" />
+                        {upscaling ? (lang === 'zh' ? '正在提升...' : 'Upscaling...') : (lang === 'zh' ? '✨ 提升分辨率 (2x)' : '✨ Upscale (2x)')}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          if (originalCutout) {
+                            setCutoutCanvas(originalCutout)
+                            setOriginalCutout(null)
+                            setUpscaled(false)
+                          }
+                        }}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-slate-300 text-slate-600 font-medium text-sm hover:bg-slate-50 transition-all"
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        {lang === 'zh' ? '恢复原始' : 'Restore Original'}
+                      </button>
+                    )}
+                    <p className="text-xs text-center text-slate-400">{lang === 'zh' ? '使用高质量插值放大 2 倍' : '2x high-quality interpolation'}</p>
+                  </div>
+                )}
 
                 {/* Preview with glow */}
                 {finalCanvas && (
