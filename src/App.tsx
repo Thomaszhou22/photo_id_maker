@@ -468,7 +468,6 @@ export default function App() {
   const [contrast, setContrast] = useState(100)
   const [smoothing, setSmoothing] = useState(0)
   const [upscaled, setUpscaled] = useState(false)
-  const [originalCutout, setOriginalCutout] = useState<HTMLCanvasElement | null>(null)
   const [upscaling, setUpscaling] = useState(false)
   const [isEraser, setIsEraser] = useState(false)
   const [clothing, setClothing] = useState<Clothing>('none')
