@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
-import { Camera } from 'lucide-react'
+import { Camera, Sparkles, Ruler, FileDown, Upload, Image, Shield, ArrowRight, ArrowLeft, Download, Printer } from 'lucide-react'
 import { removeBackground, preload } from '@imgly/background-removal'
 import { jsPDF } from 'jspdf'
 
@@ -68,6 +68,13 @@ const t = (lang: Lang) => ({
   stepDownload: lang === 'zh' ? '下载保存' : 'Download',
   originalPhoto: lang === 'zh' ? '原始照片' : 'Original Photo',
   footerText: lang === 'zh' ? '基于 AI 的证件照生成工具 · 本地处理，照片不会上传到任何服务器' : 'AI-powered ID photo generator · All processing happens locally in your browser',
+  feature1Title: lang === 'zh' ? 'AI 智能抠图' : 'AI Background Removal',
+  feature1Desc: lang === 'zh' ? '本地处理，隐私安全，无需上传到服务器' : 'Local processing, privacy safe, no server upload',
+  feature2Title: lang === 'zh' ? '多种尺寸' : 'Multiple Sizes',
+  feature2Desc: lang === 'zh' ? '一寸、二寸、护照、签证等标准尺寸' : '1", 2", passport, visa and more standard sizes',
+  feature3Title: lang === 'zh' ? '一键排版打印' : 'One-click Print',
+  feature3Desc: lang === 'zh' ? '自动排版 A4 纸，PDF 输出直接打印' : 'Auto layout on A4 paper, PDF output for printing',
+  downloadDone: lang === 'zh' ? '🎉 证件照已生成！选择下载方式即可保存' : '🎉 ID photo ready! Choose a download option below',
 })
 
 // --- Helper: load image from File or URL ---
@@ -115,12 +122,10 @@ async function detectAndCrop(canvas: HTMLCanvasElement, targetRatio: number): Pr
     const faceCY = faceBox.y + faceBox.height / 2
     const faceSize = Math.max(faceBox.width, faceBox.height)
 
-    // Always ensure head + upper body visible; crop from bottom if needed
     const padFactor = 1.8
     cropW = faceSize * padFactor
     cropH = cropW / targetRatio
 
-    // Face should be in the upper portion (top 30-35%)
     const desiredFaceY = cropH * 0.33
     cropY = faceCY - desiredFaceY
     cropX = faceCX - cropW / 2
@@ -173,7 +178,6 @@ function compositePhoto(
   const srcRatio = cutoutCanvas.width / cutoutCanvas.height
   const dstRatio = size.wPx / size.hPx
 
-  // contain logic: fit entire image without cropping
   let dw: number, dh: number, dx: number, dy: number
   if (srcRatio > dstRatio) {
     dw = out.width
@@ -245,18 +249,46 @@ const checkerStyle = {
   backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px',
 }
 
-// --- Step indicator badge ---
-function StepBadge({ step, currentStep, label, num }: { step: Step; currentStep: Step; label: string; num: string }) {
-  const isActive = step === currentStep
-  const isPast = ['upload','edit','download'].indexOf(currentStep) > ['upload','edit','download'].indexOf(step)
+// --- Step indicator ---
+function StepIndicator({ currentStep, strings }: { currentStep: Step; strings: ReturnType<typeof t> }) {
+  const steps: { key: Step; label: string; num: string }[] = [
+    { key: 'upload', label: strings.stepUpload, num: '1' },
+    { key: 'edit', label: strings.stepEdit, num: '2' },
+    { key: 'download', label: strings.stepDownload, num: '3' },
+  ]
+  const currentIndex = steps.findIndex(s => s.key === currentStep)
+
   return (
-    <div className="flex items-center gap-2">
-      <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold transition-all ${
-        isPast ? 'bg-blue-600 text-white' : isActive ? 'bg-blue-600 text-white shadow-md shadow-blue-600/25' : 'bg-slate-200 text-slate-400'
-      }`}>
-        {isPast ? '✓' : num.replace('Step ', '').replace('第 ', '').replace(' 步', '')}
-      </span>
-      <span className={`text-sm font-semibold ${isActive ? 'text-slate-900' : isPast ? 'text-blue-600' : 'text-slate-400'}`}>{label}</span>
+    <div className="flex items-center gap-0 w-full">
+      {steps.map((s, i) => {
+        const isActive = s.key === currentStep
+        const isPast = i < currentIndex
+        const isLast = i === steps.length - 1
+        return (
+          <div key={s.key} className="flex items-center flex-1">
+            <div className="flex items-center gap-2.5">
+              <div className={`relative flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold transition-all duration-300 ${
+                isPast ? 'bg-blue-600 text-white shadow-md shadow-blue-600/25' :
+                isActive ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/30 scale-110' :
+                'bg-slate-100 text-slate-400'
+              }`}>
+                {isPast ? '✓' : s.num}
+                {isActive && (
+                  <span className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 animate-ping opacity-20" />
+                )}
+              </div>
+              <span className={`text-sm font-semibold transition-colors duration-300 ${
+                isActive ? 'text-slate-900' : isPast ? 'text-blue-600' : 'text-slate-400'
+              }`}>{s.label}</span>
+            </div>
+            {!isLast && (
+              <div className={`flex-1 h-px mx-4 transition-colors duration-300 ${
+                i < currentIndex ? 'bg-blue-300' : 'bg-slate-200'
+              }`} />
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -302,7 +334,6 @@ export default function App() {
           setPreloadProgress(100)
         }
       } catch (e) {
-        // Model preload failed silently, will retry on actual use
       } finally {
         if (!cancelled) setPreloading(false)
       }
@@ -391,7 +422,6 @@ export default function App() {
     if (file) processFile(file)
   }, [processFile])
 
-  // Cache data URLs to avoid re-generating on every render
   const previewDataUrl = useMemo(() => finalCanvas?.toDataURL() ?? '', [finalCanvas])
   const downloadDataUrl = useMemo(() => finalCanvas?.toDataURL() ?? '', [finalCanvas])
 
@@ -416,7 +446,6 @@ export default function App() {
     setEditing(true)
   }, [cutoutCanvas])
 
-  // Initialize edit canvas when entering edit mode
   useEffect(() => {
     if (!editing || !cutoutCanvas) return
     const ec = editCanvasRef.current
@@ -512,59 +541,71 @@ export default function App() {
 
   // --- Shared Header ---
   const Header = () => (
-    <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/80 backdrop-blur-md shadow-sm">
-      <div className="max-w-2xl mx-auto flex items-center justify-between px-6 py-3">
+    <header className="sticky top-0 z-50 border-b border-slate-200/60 bg-white/70 backdrop-blur-xl">
+      <div className="max-w-2xl mx-auto flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-3">
-          <div className="rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/20 w-9 h-9 flex items-center justify-center">
+          <div className="rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/20 w-10 h-10 flex items-center justify-center">
             <Camera className="h-5 w-5" strokeWidth={2} />
           </div>
-          <h1 className="text-lg font-bold tracking-tight text-slate-900">{strings.title}</h1>
+          <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-slate-900 to-slate-600 bg-clip-text text-transparent">{strings.title}</h1>
         </div>
-        {/* Language toggle pill */}
-        <div className="rounded-lg border border-slate-200/90 bg-slate-50/90 p-0.5 shadow-sm flex items-center">
+        <div className="rounded-full border border-slate-200/90 bg-slate-50/80 p-0.5 shadow-sm flex items-center">
           <button
             onClick={() => setLang('en')}
-            className={`px-3 py-1.5 text-sm font-semibold rounded-md transition-all ${lang === 'en' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`px-3.5 py-1.5 text-sm font-semibold rounded-full transition-all duration-200 ${lang === 'en' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
           >
             EN
           </button>
           <button
             onClick={() => setLang('zh')}
-            className={`px-3 py-1.5 text-sm font-semibold rounded-md transition-all ${lang === 'zh' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`px-3.5 py-1.5 text-sm font-semibold rounded-full transition-all duration-200 ${lang === 'zh' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
           >
             中文
           </button>
         </div>
       </div>
-      {/* Step indicator */}
-      <div className="max-w-2xl mx-auto px-6 pb-3 flex items-center gap-6">
-        <StepBadge step="upload" currentStep={step} label={strings.stepUpload} num={strings.step1} />
-        <div className="flex-1 h-px bg-slate-200" />
-        <StepBadge step="edit" currentStep={step} label={strings.stepEdit} num={strings.step2} />
-        <div className="flex-1 h-px bg-slate-200" />
-        <StepBadge step="download" currentStep={step} label={strings.stepDownload} num={strings.step3} />
+      <div className="max-w-2xl mx-auto px-6 pb-4">
+        <StepIndicator currentStep={step} strings={strings} />
       </div>
     </header>
   )
 
   // --- Shared Footer ---
   const Footer = () => (
-    <footer className="border-t border-slate-200/80 bg-white/80 backdrop-blur-md py-6 mt-12">
-      <p className="text-center text-sm text-slate-500">{strings.footerText}</p>
+    <footer className="border-t border-slate-200/60 bg-slate-50/80 backdrop-blur-sm py-8 mt-auto">
+      <div className="max-w-2xl mx-auto px-6">
+        <div className="flex items-center justify-center gap-2 mb-3">
+          <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center">
+            <Camera className="h-3 w-3 text-white" strokeWidth={2.5} />
+          </div>
+          <span className="text-sm font-bold text-slate-700">{strings.title}</span>
+        </div>
+        <p className="text-center text-sm text-slate-400">{strings.footerText}</p>
+        <p className="text-center text-xs text-slate-300 mt-2">
+          {lang === 'zh' ? 'Powered by @imgly/background-removal · Open Source' : 'Powered by @imgly/background-removal · Open Source'}
+        </p>
+      </div>
     </footer>
   )
 
   // ==================== UPLOAD STEP ====================
   if (step === 'upload') {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white font-sans text-slate-900 antialiased flex flex-col">
+      <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-blue-50/30 font-sans text-slate-900 antialiased flex flex-col">
         <Header />
-        <main className="flex-1 flex items-center justify-center p-6">
+        <main className="flex-1 flex flex-col items-center justify-center p-6">
           <div className="w-full max-w-lg">
+
             {/* Hero */}
-            <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold tracking-tight text-slate-900 mb-2">{strings.title}</h2>
-              <p className="text-slate-500">{strings.subtitle}</p>
+            <div className="text-center mb-10">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 px-4 py-1.5 mb-5">
+                <Sparkles className="h-3.5 w-3.5 text-blue-500" />
+                <span className="text-xs font-bold text-blue-600">{lang === 'zh' ? 'AI 驱动 · 完全免费' : 'AI-Powered · Free'}</span>
+              </div>
+              <h2 className="text-4xl font-bold tracking-tight bg-gradient-to-b from-slate-900 to-slate-600 bg-clip-text text-transparent mb-3">
+                {strings.title}
+              </h2>
+              <p className="text-lg text-slate-400 max-w-sm mx-auto">{strings.subtitle}</p>
             </div>
 
             {/* Upload area */}
@@ -572,21 +613,31 @@ export default function App() {
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-slate-300 rounded-2xl bg-slate-50/50 p-16 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-all duration-300 group"
+              className="relative border-2 border-dashed border-slate-200 rounded-3xl bg-white/60 backdrop-blur-sm p-14 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/20 hover:shadow-xl hover:shadow-blue-600/5 transition-all duration-500 group overflow-hidden"
             >
-              <div className="rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/20 w-16 h-16 mx-auto mb-5 flex items-center justify-center text-3xl group-hover:scale-105 transition-transform duration-300">
-                
+              <div className="absolute inset-0 bg-gradient-to-b from-blue-50/0 to-blue-50/0 group-hover:from-blue-50/50 group-hover:to-indigo-50/30 transition-all duration-500 rounded-3xl" />
+              <div className="relative">
+                <div className="rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-xl shadow-blue-600/20 w-20 h-20 mx-auto mb-6 flex items-center justify-center group-hover:scale-110 group-hover:shadow-2xl group-hover:shadow-blue-600/30 transition-all duration-500">
+                  <Upload className="h-8 w-8" strokeWidth={1.8} />
+                </div>
+                <p className="text-lg font-semibold text-slate-700 mb-2 group-hover:text-blue-700 transition-colors">{strings.uploadHint}</p>
+                <p className="text-sm text-slate-400">{strings.uploadFormats}</p>
+                <p className="text-xs text-slate-300 mt-3 flex items-center justify-center gap-1.5">
+                  <span>💡</span>
+                  {lang === 'zh' ? '人脸检测功能在 Chrome 浏览器中效果最佳' : 'Face detection works best in Chrome'}
+                </p>
               </div>
-              <p className="text-lg font-semibold text-slate-700 mb-1">{strings.uploadHint}</p>
-              <p className="text-sm text-slate-400">{strings.uploadFormats}</p>
-              <p className="text-xs text-slate-300 mt-2">{lang === 'zh' ? '💡 人脸检测功能在 Chrome 浏览器中效果最佳' : '💡 Face detection works best in Chrome'}</p>
             </div>
 
+            {/* Preloading bar */}
             {preloading && (
-              <div className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm text-center">
-                <p className="text-sm text-slate-500 mb-3">{lang === 'zh' ? '正在预加载 AI 模型...' : 'Preloading AI model...'}</p>
-                <div className="h-2 bg-slate-200 rounded-full overflow-hidden w-64 mx-auto">
-                  <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${preloadProgress}%` }} />
+              <div className="mt-6 rounded-2xl border border-slate-200/60 bg-white/80 backdrop-blur-sm p-5 shadow-soft text-center">
+                <p className="text-sm text-slate-500 mb-3 flex items-center justify-center gap-2">
+                  <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                  {lang === 'zh' ? '正在预加载 AI 模型...' : 'Preloading AI model...'}
+                </p>
+                <div className="h-2 bg-slate-100 rounded-full overflow-hidden w-64 mx-auto">
+                  <div className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-500" style={{ width: `${preloadProgress}%` }} />
                 </div>
               </div>
             )}
@@ -598,6 +649,26 @@ export default function App() {
               className="hidden"
               onChange={handleFileChange}
             />
+
+            {/* Feature cards */}
+            <div className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {[
+                { icon: <Shield className="h-5 w-5" />, title: strings.feature1Title, desc: strings.feature1Desc, gradient: 'from-blue-500 to-indigo-500' },
+                { icon: <Ruler className="h-5 w-5" />, title: strings.feature2Title, desc: strings.feature2Desc, gradient: 'from-violet-500 to-purple-500' },
+                { icon: <FileDown className="h-5 w-5" />, title: strings.feature3Title, desc: strings.feature3Desc, gradient: 'from-emerald-500 to-teal-500' },
+              ].map((f, i) => (
+                <div
+                  key={i}
+                  className="rounded-2xl border border-slate-200/60 bg-white/80 backdrop-blur-sm p-5 shadow-soft hover:shadow-lift hover:-translate-y-0.5 transition-all duration-300 text-center"
+                >
+                  <div className={`rounded-xl bg-gradient-to-br ${f.gradient} text-white w-10 h-10 mx-auto mb-3 flex items-center justify-center shadow-md`}>
+                    {f.icon}
+                  </div>
+                  <h3 className="text-sm font-bold text-slate-800 mb-1">{f.title}</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">{f.desc}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </main>
         <Footer />
@@ -608,52 +679,54 @@ export default function App() {
   // ==================== EDIT STEP ====================
   if (step === 'edit') {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white font-sans text-slate-900 antialiased flex flex-col">
+      <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-blue-50/30 font-sans text-slate-900 antialiased flex flex-col">
         <Header />
         <main className="flex-1 p-6">
-          <div className="max-w-2xl mx-auto space-y-5 pt-6">
+          <div className="max-w-2xl mx-auto space-y-4 pt-6">
 
-            {/* Background removal status */}
             {removing ? (
-              <div className="rounded-2xl border border-slate-200/80 bg-white p-12 shadow-sm text-center">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-50 mb-4">
-                  <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+              <div className="rounded-3xl border border-slate-200/60 bg-white/80 backdrop-blur-sm p-16 shadow-soft text-center">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-blue-50 to-indigo-50 mb-5">
+                  <div className="w-7 h-7 border-[3px] border-blue-600 border-t-transparent rounded-full animate-spin" />
                 </div>
-                <p className="text-slate-600 font-medium">{strings.removing}</p>
+                <p className="text-slate-700 font-semibold text-lg mb-1">{strings.removing}</p>
+                <p className="text-sm text-slate-400 mb-5">{lang === 'zh' ? '首次使用需下载约 40MB 模型' : 'First use requires ~40MB model download'}</p>
                 {removingProgress && (
-                  <div className="mt-4 w-64 mx-auto">
-                    <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
-                      <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${removingProgress.progress}%` }} />
+                  <div className="w-72 mx-auto">
+                    <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-300" style={{ width: `${removingProgress.progress}%` }} />
                     </div>
-                    <p className="mt-1.5 text-sm text-slate-400">{removingProgress.progress}%</p>
+                    <p className="mt-2 text-sm font-semibold text-blue-600">{removingProgress.progress}%</p>
                   </div>
                 )}
               </div>
             ) : (
               <>
                 {/* Original thumbnail */}
-                <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
-                  <p className="text-sm font-semibold text-slate-700 mb-3">{strings.originalPhoto}</p>
-                  <img src={originalUrl} alt="original" className="w-20 h-20 object-cover rounded-xl shadow-sm border border-slate-200/80" />
+                <div className="rounded-2xl border border-slate-200/60 bg-white/80 backdrop-blur-sm p-5 shadow-soft">
+                  <p className="text-sm font-bold text-slate-700 mb-3">{strings.originalPhoto}</p>
+                  <img src={originalUrl} alt="original" className="w-20 h-20 object-cover rounded-xl shadow-sm ring-2 ring-slate-100" />
                 </div>
 
                 {/* Background color */}
-                <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
-                  <p className="text-sm font-semibold text-slate-700 mb-4">{strings.bgColor}</p>
-                  <div className="flex gap-3 flex-wrap">
+                <div className="rounded-2xl border border-slate-200/60 bg-white/80 backdrop-blur-sm p-5 shadow-soft">
+                  <p className="text-sm font-bold text-slate-700 mb-4">{strings.bgColor}</p>
+                  <div className="flex gap-4 flex-wrap">
                     {(['white', 'blue', 'red', 'transparent'] as BgColor[]).map((c) => (
                       <button
                         key={c}
                         onClick={() => setBgColor(c)}
-                        className={`flex flex-col items-center gap-1.5 group transition-all duration-300 ${bgColor === c ? 'scale-105' : 'hover:scale-105'}`}
+                        className={`flex flex-col items-center gap-2 group transition-all duration-300 ${bgColor === c ? 'scale-110' : 'hover:scale-105'}`}
                       >
                         <div
-                          className={`w-12 h-12 rounded-xl border-2 transition-all shadow-sm ${
-                            bgColor === c ? 'border-blue-500 ring-2 ring-blue-500/20 shadow-md' : 'border-slate-200'
+                          className={`w-14 h-14 rounded-full border-[3px] transition-all duration-300 ${
+                            bgColor === c
+                              ? 'border-blue-500 ring-4 ring-blue-500/15 shadow-lg shadow-blue-500/20'
+                              : 'border-slate-200 hover:border-slate-300 hover:shadow-md'
                           }`}
                           style={c === 'transparent' ? checkerStyle : { backgroundColor: BG_COLORS[c] }}
                         />
-                        <span className={`text-xs font-semibold transition-colors ${bgColor === c ? 'text-blue-600' : 'text-slate-400'}`}>
+                        <span className={`text-xs font-semibold transition-colors ${bgColor === c ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600'}`}>
                           {strings[c]}
                         </span>
                       </button>
@@ -662,8 +735,8 @@ export default function App() {
                 </div>
 
                 {/* Size presets */}
-                <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
-                  <p className="text-sm font-semibold text-slate-700 mb-4">{strings.photoSize}</p>
+                <div className="rounded-2xl border border-slate-200/60 bg-white/80 backdrop-blur-sm p-5 shadow-soft">
+                  <p className="text-sm font-bold text-slate-700 mb-4">{strings.photoSize}</p>
                   <div className="flex gap-2 flex-wrap">
                     {SIZE_PRESETS.map((s, i) => (
                       <button
@@ -671,8 +744,8 @@ export default function App() {
                         onClick={() => setSizeIndex(i)}
                         className={`rounded-full px-4 py-2 text-sm font-semibold transition-all duration-300 ${
                           sizeIndex === i
-                            ? 'bg-blue-600 text-white shadow-md shadow-blue-600/25'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/25'
+                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700'
                         }`}
                       >
                         {lang === 'zh' ? s.labelZh : s.labelEn}
@@ -681,37 +754,40 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Preview */}
+                {/* Preview with glow */}
                 {finalCanvas && (
-                  <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
-                    <p className="text-sm font-semibold text-slate-700 mb-4">{strings.preview}</p>
+                  <div className="rounded-2xl border border-slate-200/60 bg-white/80 backdrop-blur-sm p-6 shadow-soft">
+                    <p className="text-sm font-bold text-slate-700 mb-4">{strings.preview}</p>
                     <div className="flex justify-center">
-                      <div
-                        className="relative rounded-xl border border-slate-200/80 overflow-hidden shadow-sm"
-                        style={{
-                          width: 200,
-                          height: 200 * (size.hPx / size.wPx),
-                          ...(bgColor === 'transparent' ? checkerStyle : { backgroundColor: BG_COLORS[bgColor] }),
-                        }}
-                      >
-                        <img
-                          src={previewDataUrl}
-                          alt="preview"
-                          className="absolute inset-0 w-full h-full object-contain"
-                        />
+                      <div className="relative p-4 rounded-2xl bg-gradient-to-b from-slate-50 to-slate-100/50">
+                        <div className="absolute inset-2 rounded-xl bg-gradient-to-br from-blue-100/40 to-indigo-100/40 blur-xl" />
+                        <div
+                          className="relative rounded-xl border border-slate-200/80 overflow-hidden shadow-md"
+                          style={{
+                            width: 200,
+                            height: 200 * (size.hPx / size.wPx),
+                            ...(bgColor === 'transparent' ? checkerStyle : { backgroundColor: BG_COLORS[bgColor] }),
+                          }}
+                        >
+                          <img
+                            src={previewDataUrl}
+                            alt="preview"
+                            className="absolute inset-0 w-full h-full object-contain"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
                 )}
 
                 {/* Manual Edit */}
-                <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+                <div className="rounded-2xl border border-slate-200/60 bg-white/80 backdrop-blur-sm p-5 shadow-soft">
                   <div className="flex items-center justify-between mb-3">
-                    <p className="text-sm font-semibold text-slate-700">{strings.manualEdit}</p>
+                    <p className="text-sm font-bold text-slate-700">{strings.manualEdit}</p>
                     {!editing ? (
                       <button
                         onClick={startEditing}
-                        className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-all"
+                        className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 shadow-sm"
                       >
                         {strings.manualEdit}
                       </button>
@@ -720,13 +796,13 @@ export default function App() {
                         <button
                           onClick={undoEdit}
                           disabled={editHistory.length === 0}
-                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition-all"
+                          className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-all duration-200 shadow-sm"
                         >
                           {strings.undoEdit}
                         </button>
                         <button
                           onClick={applyEditing}
-                          className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-blue-700 hover:shadow-lift"
+                          className="rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-600/25 transition-all duration-200 hover:shadow-xl"
                         >
                           {strings.applyEdit}
                         </button>
@@ -740,22 +816,24 @@ export default function App() {
                         <button
                           onClick={() => setIsEraser(!isEraser)}
                           className={`rounded-full px-4 py-2 text-sm font-semibold transition-all duration-300 ${
-                            isEraser ? 'bg-slate-900 text-white shadow-md' : 'bg-red-500 text-white shadow-md shadow-red-500/25'
+                            isEraser
+                              ? 'bg-slate-800 text-white shadow-lg shadow-slate-800/25'
+                              : 'bg-red-500 text-white shadow-lg shadow-red-500/25'
                           }`}
                         >
-                          {isEraser ? '' + strings.eraserMode : '' + strings.paintMode}
+                          {isEraser ? strings.eraserMode : strings.paintMode}
                         </button>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-slate-500">{strings.brushSize}</span>
+                        <div className="flex items-center gap-2 bg-slate-50 rounded-full px-4 py-2">
+                          <span className="text-xs font-medium text-slate-500">{strings.brushSize}</span>
                           <input
                             type="range"
                             min={3}
                             max={50}
                             value={brushRadius}
                             onChange={(e) => setBrushRadius(Number(e.target.value))}
-                            className="w-24 accent-blue-600"
+                            className="w-20 accent-blue-600"
                           />
-                          <span className="text-sm text-slate-400 w-6">{brushRadius}</span>
+                          <span className="text-xs font-bold text-slate-600 w-5">{brushRadius}</span>
                         </div>
                       </div>
                       <div className="flex justify-center">
@@ -777,19 +855,21 @@ export default function App() {
                 </div>
 
                 {/* Nav */}
-                <div className="flex justify-between pt-2">
+                <div className="flex justify-between pt-2 pb-4">
                   <button
                     onClick={goToUpload}
-                    className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-all"
+                    className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 shadow-sm"
                   >
-                    ← {strings.back}
+                    <ArrowLeft className="h-4 w-4" />
+                    {strings.back}
                   </button>
                   <button
                     onClick={() => setStep('download')}
                     disabled={!finalCanvas}
-                    className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-blue-700 hover:shadow-lift disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="flex items-center gap-2 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-600/25 transition-all duration-200 hover:shadow-xl disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    {strings.next} →
+                    {strings.next}
+                    <ArrowRight className="h-4 w-4" />
                   </button>
                 </div>
               </>
@@ -803,62 +883,82 @@ export default function App() {
 
   // ==================== DOWNLOAD STEP ====================
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white font-sans text-slate-900 antialiased flex flex-col">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-blue-50/30 font-sans text-slate-900 antialiased flex flex-col">
       <Header />
       <main className="flex-1 p-6">
-        <div className="max-w-lg mx-auto pt-6 space-y-5">
-          {/* Title */}
+        <div className="max-w-lg mx-auto pt-6 space-y-6">
+
+          {/* Success message */}
           <div className="text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-slate-900">{strings.downloadPhoto.split(' (')[0]}</h2>
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 shadow-xl shadow-emerald-500/20 mb-4">
+              <span className="text-2xl">✓</span>
+            </div>
+            <h2 className="text-3xl font-bold tracking-tight bg-gradient-to-b from-slate-900 to-slate-600 bg-clip-text text-transparent">
+              {strings.downloadDone.split('！')[0].split('!')[0]}{lang === 'zh' ? '！' : '!'}
+            </h2>
+            <p className="text-slate-400 mt-2">{strings.downloadPhoto.split(' (')[0]} · {lang === 'zh' ? size.labelZh : size.labelEn}</p>
           </div>
 
-          {/* Preview card */}
+          {/* Preview card with glow */}
           {finalCanvas && (
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+            <div className="rounded-3xl border border-slate-200/60 bg-white/80 backdrop-blur-sm p-8 shadow-soft">
               <div className="flex justify-center">
-                <div
-                  className="relative rounded-xl border border-slate-200/80 overflow-hidden shadow-sm"
-                  style={{
-                    width: 240,
-                    height: 240 * (size.hPx / size.wPx),
-                    ...(bgColor === 'transparent' ? checkerStyle : {}),
-                  }}
-                >
-                  <img
-                    src={downloadDataUrl}
-                    alt="final"
-                    className="absolute inset-0 w-full h-full object-contain"
-                  />
+                <div className="relative p-5 rounded-2xl bg-gradient-to-b from-slate-50 to-slate-100/50">
+                  <div className="absolute inset-3 rounded-xl bg-gradient-to-br from-blue-100/50 to-indigo-100/50 blur-2xl" />
+                  <div
+                    className="relative rounded-xl border border-slate-200/80 overflow-hidden shadow-lg"
+                    style={{
+                      width: 240,
+                      height: 240 * (size.hPx / size.wPx),
+                      ...(bgColor === 'transparent' ? checkerStyle : {}),
+                    }}
+                  >
+                    <img
+                      src={downloadDataUrl}
+                      alt="final"
+                      className="absolute inset-0 w-full h-full object-contain"
+                    />
+                  </div>
                 </div>
               </div>
-              <p className="text-center text-sm text-slate-500 mt-4">
+              <p className="text-center text-sm text-slate-400 mt-5 font-medium">
                 {lang === 'zh' ? size.labelZh : size.labelEn} · {size.wPx}×{size.hPx}px
               </p>
             </div>
           )}
 
-          {/* Download buttons */}
-          <div className="space-y-3">
+          {/* Download buttons - card style */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <button
               onClick={handleDownloadPNG}
-              className="w-full rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-semibold text-white shadow-soft transition hover:bg-blue-700 hover:shadow-lift flex items-center justify-center gap-2.5"
+              className="group rounded-2xl border border-slate-200/60 bg-white/80 backdrop-blur-sm p-6 shadow-soft hover:shadow-lift hover:-translate-y-0.5 transition-all duration-300 text-center"
             >
-              {strings.downloadPhoto}
+              <div className="rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 text-white w-12 h-12 mx-auto mb-3 flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:scale-110 transition-transform duration-300">
+                <Download className="h-5 w-5" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-800 mb-1">{strings.downloadPhoto.split(' (')[0]}</h3>
+              <p className="text-xs text-slate-400">PNG · {size.wPx}×{size.hPx}px</p>
             </button>
+
             <button
               onClick={handleDownloadPDF}
-              className="w-full rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-3.5 text-sm font-semibold text-white shadow-soft transition hover:from-emerald-700 hover:to-teal-700 hover:shadow-lift flex items-center justify-center gap-2.5"
+              className="group rounded-2xl border border-slate-200/60 bg-white/80 backdrop-blur-sm p-6 shadow-soft hover:shadow-lift hover:-translate-y-0.5 transition-all duration-300 text-center"
             >
-              {strings.downloadPrint}
+              <div className="rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white w-12 h-12 mx-auto mb-3 flex items-center justify-center shadow-lg shadow-emerald-500/20 group-hover:scale-110 transition-transform duration-300">
+                <Printer className="h-5 w-5" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-800 mb-1">{lang === 'zh' ? '排版打印' : 'Print Layout'}</h3>
+              <p className="text-xs text-slate-400">PDF · A4</p>
             </button>
           </div>
 
           {/* Back button */}
           <button
             onClick={() => setStep('edit')}
-            className="w-full rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-all"
+            className="w-full flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-3.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 shadow-sm"
           >
-            ← {strings.backToEdit}
+            <ArrowLeft className="h-4 w-4" />
+            {strings.backToEdit}
           </button>
         </div>
       </main>
