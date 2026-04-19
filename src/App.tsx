@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
-import { Camera, Sparkles, Ruler, FileDown, Upload, Image, Shield, ArrowRight, ArrowLeft, Download, Printer, Palette, Sun, CircleDot, RotateCcw, MoveVertical, Info, Shirt, Layers, Package, ZoomIn } from 'lucide-react'
+import { Camera, Sparkles, Ruler, FileDown, Upload, Image, Shield, ArrowRight, ArrowLeft, Download, Printer, Palette, Sun, CircleDot, RotateCcw, MoveVertical, Info, Layers, Package, ZoomIn } from 'lucide-react'
 import { removeBackground, preload } from '@imgly/background-removal'
 import { jsPDF } from 'jspdf'
 
@@ -7,7 +7,6 @@ import { jsPDF } from 'jspdf'
 type Step = 'upload' | 'edit' | 'download'
 type Lang = 'zh' | 'en'
 type BgColor = 'white' | 'blue' | 'red' | 'transparent' | 'custom'
-type Clothing = 'none' | 'white-shirt' | 'suit'
 type ProgressState = { stage: string; progress: number } | null
 
 type Category = 'china' | 'international' | 'social' | 'other'
@@ -93,10 +92,6 @@ const t = (lang: Lang) => ({
   feature3Title: lang === 'zh' ? '一键排版打印' : 'One-click Print',
   feature3Desc: lang === 'zh' ? '自动排版 A4 纸，PDF 输出直接打印' : 'Auto layout on A4 paper, PDF output for printing',
   downloadDone: lang === 'zh' ? '🎉 证件照已生成！选择下载方式即可保存' : '🎉 ID photo ready! Choose a download option below',
-  clothing: lang === 'zh' ? '底衣' : 'Clothing',
-  clothingNone: lang === 'zh' ? '无' : 'None',
-  clothingWhiteShirt: lang === 'zh' ? '白衬衫' : 'White Shirt',
-  clothingSuit: lang === 'zh' ? '西装' : 'Suit',
 })
 
 // --- Helper: load image from File or URL ---
@@ -191,8 +186,7 @@ function compositePhoto(
   customBgColor = '#438EDB',
   brightness = 100,
   contrast = 100,
-  smoothing = 0,
-  clothing: Clothing = 'none'
+  smoothing = 0
 ): HTMLCanvasElement {
   const out = document.createElement('canvas')
   out.width = size.wPx
@@ -224,104 +218,6 @@ function compositePhoto(
   ctx.filter = `brightness(${brightness / 100}) contrast(${contrast / 100})`
   ctx.drawImage(cutoutCanvas, dx, dy, dw, dh)
   ctx.filter = 'none'
-
-  // Draw clothing overlay
-  if (clothing !== 'none') {
-    const w = out.width
-    const h = out.height
-    const centerX = w / 2
-    const bottom = h
-
-    if (clothing === 'white-shirt') {
-      // White shirt with V-neck
-      const shoulderW = w * 0.35
-      ctx.fillStyle = 'white'
-      ctx.shadowColor = 'rgba(0,0,0,0.15)'
-      ctx.shadowBlur = 8
-      ctx.shadowOffsetY = -4
-      ctx.beginPath()
-      ctx.moveTo(centerX - shoulderW, bottom)
-      ctx.quadraticCurveTo(centerX - shoulderW * 0.6, bottom - h * 0.18, centerX - w * 0.02, bottom - h * 0.28)
-      ctx.quadraticCurveTo(centerX, bottom - h * 0.30, centerX + w * 0.02, bottom - h * 0.28)
-      ctx.quadraticCurveTo(centerX + shoulderW * 0.6, bottom - h * 0.18, centerX + shoulderW, bottom)
-      ctx.closePath()
-      ctx.fill()
-      ctx.shadowColor = 'transparent'
-      ctx.shadowBlur = 0
-      ctx.shadowOffsetY = 0
-      // Collar lines
-      ctx.strokeStyle = '#e0e0e0'
-      ctx.lineWidth = 1.5
-      ctx.beginPath()
-      ctx.moveTo(centerX - shoulderW * 0.5, bottom - h * 0.02)
-      ctx.quadraticCurveTo(centerX - shoulderW * 0.3, bottom - h * 0.20, centerX - w * 0.01, bottom - h * 0.27)
-      ctx.stroke()
-      ctx.beginPath()
-      ctx.moveTo(centerX + shoulderW * 0.5, bottom - h * 0.02)
-      ctx.quadraticCurveTo(centerX + shoulderW * 0.3, bottom - h * 0.20, centerX + w * 0.01, bottom - h * 0.27)
-      ctx.stroke()
-    } else if (clothing === 'suit') {
-      // Suit jacket
-      const suitTop = bottom * 0.68
-      ctx.fillStyle = '#1a1a2e'
-      ctx.shadowColor = 'rgba(0,0,0,0.2)'
-      ctx.shadowBlur = 10
-      ctx.shadowOffsetY = -4
-      ctx.beginPath()
-      ctx.moveTo(centerX - w * 0.45, bottom)
-      ctx.quadraticCurveTo(centerX - w * 0.45, suitTop + 10, centerX - w * 0.15, suitTop + 5)
-      ctx.lineTo(centerX - w * 0.04, bottom - h * 0.32)
-      ctx.lineTo(centerX, bottom - h * 0.30)
-      ctx.lineTo(centerX + w * 0.04, bottom - h * 0.32)
-      ctx.lineTo(centerX + w * 0.15, suitTop + 5)
-      ctx.quadraticCurveTo(centerX + w * 0.45, suitTop + 10, centerX + w * 0.45, bottom)
-      ctx.closePath()
-      ctx.fill()
-      ctx.shadowColor = 'transparent'
-      ctx.shadowBlur = 0
-      ctx.shadowOffsetY = 0
-      // White shirt inner
-      ctx.fillStyle = '#f5f5f5'
-      ctx.beginPath()
-      ctx.moveTo(centerX - w * 0.04, bottom)
-      ctx.lineTo(centerX - w * 0.02, bottom - h * 0.33)
-      ctx.lineTo(centerX, bottom - h * 0.30)
-      ctx.lineTo(centerX + w * 0.02, bottom - h * 0.33)
-      ctx.lineTo(centerX + w * 0.04, bottom)
-      ctx.closePath()
-      ctx.fill()
-      // Tie
-      const tieGrad = ctx.createLinearGradient(centerX, bottom - h * 0.28, centerX, bottom)
-      tieGrad.addColorStop(0, '#6B0000')
-      tieGrad.addColorStop(0.4, '#8B0000')
-      tieGrad.addColorStop(1, '#5a0000')
-      ctx.fillStyle = tieGrad
-      ctx.beginPath()
-      ctx.moveTo(centerX - w * 0.018, bottom - h * 0.22)
-      ctx.lineTo(centerX, bottom - h * 0.28)
-      ctx.lineTo(centerX + w * 0.018, bottom - h * 0.22)
-      ctx.closePath()
-      ctx.fill()
-      ctx.beginPath()
-      ctx.moveTo(centerX - w * 0.022, bottom - h * 0.22)
-      ctx.lineTo(centerX - w * 0.012, bottom)
-      ctx.lineTo(centerX + w * 0.012, bottom)
-      ctx.lineTo(centerX + w * 0.022, bottom - h * 0.22)
-      ctx.closePath()
-      ctx.fill()
-      // Lapel lines
-      ctx.strokeStyle = 'rgba(255,255,255,0.15)'
-      ctx.lineWidth = 1.5
-      ctx.beginPath()
-      ctx.moveTo(centerX - w * 0.12, suitTop + 8)
-      ctx.lineTo(centerX - w * 0.035, bottom - h * 0.32)
-      ctx.stroke()
-      ctx.beginPath()
-      ctx.moveTo(centerX + w * 0.12, suitTop + 8)
-      ctx.lineTo(centerX + w * 0.035, bottom - h * 0.32)
-      ctx.stroke()
-    }
-  }
 
   if (smoothing > 0) {
     const blurCanvas = document.createElement('canvas')
@@ -470,7 +366,6 @@ export default function App() {
   const [upscaled, setUpscaled] = useState(false)
   const [upscaling, setUpscaling] = useState(false)
   const [isEraser, setIsEraser] = useState(false)
-  const [clothing, setClothing] = useState<Clothing>('none')
   const [cropOffsetY, setCropOffsetY] = useState(0)
   const originalCutoutRef = useRef<HTMLCanvasElement | null>(null)
   const editCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -582,10 +477,10 @@ export default function App() {
     if (!cutoutCanvas) return
     const targetRatio = size.wPx / size.hPx
     detectAndCrop(cutoutCanvas, targetRatio, cropOffsetY).then((cropped) => {
-      const final = compositePhoto(cropped, bgColor, size, customBgColor, brightness, contrast, smoothing, clothing)
+      const final = compositePhoto(cropped, bgColor, size, customBgColor, brightness, contrast, smoothing)
       setFinalCanvas(final)
     })
-  }, [cutoutCanvas, bgColor, sizeIndex, brightness, contrast, smoothing, cropOffsetY, clothing])
+  }, [cutoutCanvas, bgColor, sizeIndex, brightness, contrast, smoothing, cropOffsetY])
 
   // Batch processing
   const processBatchFiles = useCallback(async (files: File[]) => {
@@ -613,7 +508,7 @@ export default function App() {
         URL.revokeObjectURL(url)
         const targetRatio = size.wPx / size.hPx
         const cropped = await detectAndCrop(canvas, targetRatio)
-        const final = compositePhoto(cropped, bgColor, size, customBgColor, brightness, contrast, smoothing, clothing)
+        const final = compositePhoto(cropped, bgColor, size, customBgColor, brightness, contrast, smoothing)
         setBatchResults(prev => [...prev, { fileName: limited[i].name, canvas: final }])
       } catch (err) {
         console.error(`Batch processing failed for ${limited[i].name}:`, err)
@@ -621,7 +516,7 @@ export default function App() {
       setBatchProgress(Math.round(((i + 1) / limited.length) * 100))
     }
     setBatchProcessing(false)
-  }, [size, bgColor, customBgColor, brightness, contrast, smoothing, clothing])
+  }, [size, bgColor, customBgColor, brightness, contrast, smoothing])
 
   // Drag & drop handlers
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -1257,29 +1152,6 @@ export default function App() {
                       />
                       <span className="text-xs font-bold text-slate-600 w-7 text-right">{smoothing}</span>
                     </div>
-                  </div>
-                </div>
-
-                {/* Clothing */}
-                <div className="rounded-2xl border border-slate-200/60 bg-white/80 backdrop-blur-sm p-5 shadow-soft">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Shirt className="h-4 w-4 text-slate-400" />
-                    <p className="text-sm font-bold text-slate-700">{strings.clothing}</p>
-                  </div>
-                  <div className="flex gap-2 flex-wrap">
-                    {([['none', strings.clothingNone], ['white-shirt', strings.clothingWhiteShirt], ['suit', strings.clothingSuit]] as [Clothing, string][]).map(([val, label]) => (
-                      <button
-                        key={val}
-                        onClick={() => setClothing(val)}
-                        className={`rounded-full px-4 py-2 text-sm font-semibold transition-all duration-300 ${
-                          clothing === val
-                            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/25'
-                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700'
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
                   </div>
                 </div>
 
