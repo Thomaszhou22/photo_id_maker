@@ -135,40 +135,82 @@ async function detectAndCrop(canvas: HTMLCanvasElement, targetRatio: number, cro
   let cropX: number, cropY: number, cropW: number, cropH: number
 
   if (faceBox) {
-    const faceCX = faceBox.x + faceBox.width / 2
-    const faceCY = faceBox.y + faceBox.height / 2
-    const faceSize = Math.max(faceBox.width, faceBox.height)
+    // Strategy 1: Face-based crop — head always complete, positioned in upper 1/3
+    const headTop = faceBox.y
+    const headBottom = faceBox.y + faceBox.height
+    const headCenterX = faceBox.x + faceBox.width / 2
+    const headWidth = faceBox.width
+    const headHeight = faceBox.height
 
-    const padFactor = 1.8
-    cropW = faceSize * padFactor
+    // Width: at least 2.5× head width for lateral padding
+    cropW = Math.max(headWidth * 2.5, srcW * 0.6)
     cropH = cropW / targetRatio
 
-    const desiredFaceY = cropH * 0.33
-    cropY = faceCY - desiredFaceY
-    cropX = faceCX - cropW / 2
+    // Ensure height covers upper body (head top + 1.2× head above, extends 2.5× below)
+    const cropTop = headTop - headHeight * 1.2
+    const minCropH = (headBottom - cropTop) * 2.5
+    if (cropH < minCropH) {
+      cropH = minCropH
+      cropW = cropH * targetRatio
+    }
 
+    cropY = headTop - headHeight * 1.2
+    cropX = headCenterX - cropW / 2
+
+    // Boundary clamping
     cropX = Math.max(0, Math.min(srcW - cropW, cropX))
-    cropY = Math.max(0, Math.min(srcH - cropH, cropY))
-    cropY = Math.max(0, Math.min(srcH - cropH, cropY + cropOffsetY))
+    cropY = Math.max(0, cropY)
 
-    if (cropW > srcW || cropH > srcH) {
-      cropW = srcW
-      cropH = srcW / targetRatio
-      cropX = 0
-      cropY = Math.max(0, (srcH - cropH) / 2)
+    // If exceeds bottom, prioritize head, truncate from bottom
+    if (cropY + cropH > srcH) {
+      cropH = srcH - cropY
+      cropW = cropH * targetRatio
     }
   } else {
-    if (srcW / srcH > targetRatio) {
-      cropH = srcH
-      cropW = srcH * targetRatio
-    } else {
-      cropW = srcW
-      cropH = srcW / targetRatio
+    // Strategy 2: Smart center crop based on subject (non-transparent pixel) bounds
+    const ctx = canvas.getContext('2d')!
+    const imageData = ctx.getImageData(0, 0, srcW, srcH)
+    const data = imageData.data
+
+    let top = srcH, bottom = 0, left = srcW, right = 0
+    for (let y = 0; y < srcH; y++) {
+      for (let x = 0; x < srcW; x++) {
+        if (data[(y * srcW + x) * 4 + 3] > 10) {
+          if (y < top) top = y
+          if (y > bottom) bottom = y
+          if (x < left) left = x
+          if (x > right) right = x
+        }
+      }
     }
-    cropX = (srcW - cropW) / 2
-    cropY = (srcH - cropH) / 2
-    cropY = Math.max(0, Math.min(srcH - cropH, cropY + cropOffsetY))
+
+    if (top < bottom) {
+      // Subject found — crop around it
+      const subjectH = bottom - top
+      const subjectCenterX = (left + right) / 2
+
+      cropY = top - subjectH * 0.15
+      cropY = Math.max(0, cropY)
+      cropH = subjectH * 1.3
+      cropW = cropH * targetRatio
+      cropX = subjectCenterX - cropW / 2
+    } else {
+      // No transparent subject found — fallback to center crop
+      if (srcW / srcH > targetRatio) {
+        cropH = srcH
+        cropW = srcH * targetRatio
+      } else {
+        cropW = srcW
+        cropH = srcW / targetRatio
+      }
+      cropX = (srcW - cropW) / 2
+      cropY = (srcH - cropH) / 2
+    }
   }
+
+  // Apply user cropOffsetY
+  cropY = cropY + cropOffsetY
+  cropY = Math.max(0, Math.min(srcH - cropH, cropY))
 
   const out = document.createElement('canvas')
   out.width = Math.round(cropW)
