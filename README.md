@@ -1,73 +1,44 @@
-# React + TypeScript + Vite
+# 📸 免费证件照制作工具 / Free ID Photo Maker
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+**AI 驱动的证件照生成器 — 完全在浏览器本地运行，无需上传照片到任何服务器。**
 
-Currently, two official plugins are available:
+AI-powered ID photo generator — runs entirely in your browser, no server upload needed.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## ✨ 功能 / Features
 
-## React Compiler
+- 🤖 **AI 智能抠图** — 自动去除背景（基于 @imgly/background-removal）
+- 👤 **人脸检测** — 智能裁剪，自动居中人脸（支持 Chrome FaceDetector API）
+- 🎨 **背景颜色** — 白色、蓝色、红色、透明、自定义颜色
+- 📐 **多种尺寸** — 一寸、二寸、小二寸、护照、签证、社交头像等
+- 🖨️ **排版打印** — 自动排版 A4 纸，生成 PDF 直接打印
+- 🌐 **中英双语** — 支持中文 / English 切换
+- 📱 **响应式设计** — 手机、平板、电脑均可使用
+- 📷 **拍照上传** — 支持摄像头直接拍照
+- 🔄 **批量处理** — 支持批量生成证件照
+- 🔒 **隐私安全** — 所有处理在本地完成，照片不会上传
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 🚀 在线使用 / Live Demo
 
-## Expanding the ESLint configuration
+👉 [https://thomaszhou22.github.io/photo_id_maker/](https://thomaszhou22.github.io/photo_id_maker/)
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## 🛠️ 技术栈 / Tech Stack
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- React 19 + TypeScript
+- Vite
+- Tailwind CSS v4
+- @imgly/background-removal（AI 背景去除）
+- jsPDF（PDF 生成）
+- Lucide React（图标）
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## 📦 本地开发 / Local Development
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+git clone https://github.com/Thomaszhou22/photo_id_maker.git
+cd photo_id_maker
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 📄 License
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+MIT
